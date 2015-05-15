@@ -1,0 +1,26 @@
+{
+  "name": "chrome-fs",
+  "version": "1.0.0",
+  "description": "Use the Node `fs` API in Chrome Apps",
+  "main": "main.js",
+  "browser": "chrome.js",
+  "scripts": {
+    "test": "standard && browserify test/chrome-app/index.js -o test/chrome-app/bundle.js && tape test/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/No9/chrome-fs.git"
+  },
+  "keywords": [
+    "chrome"
+  ],
+  "author": "anton whalley",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/No9/chrome-fs/issues"
+  },
+  "homepage": "https://github.com/No9/chrome-fs",
+  "devDependencies": {
+    "tape": "^4.0.0"
+  }
+}

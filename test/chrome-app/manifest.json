@@ -1,0 +1,16 @@
+{
+  "manifest_version": 2,
+
+  "name": "chrome-fs-test",
+  "description": "A test harness for fs module in chrome using browserify.",
+  "version": "1.0.0",
+
+  "app": {
+    "background": {
+      "scripts": ["background.js"]
+    }
+  },
+  "permissions": [
+    "filesystem"
+  ]
+}
