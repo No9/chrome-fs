@@ -65,7 +65,7 @@ Sync apis won't be supported
 - ~~fs.readlinkSync(path)~~
 - [ ] fs.realpath(path[, cache], callback)
 - ~~fs.realpathSync(path[, cache])~~
-- [ ] fs.unlink(path, callback)
+- [x] fs.unlink(path, callback)
 - ~~fs.unlinkSync(path)~~
 - [ ] fs.rmdir(path, callback)
 - ~~fs.rmdirSync(path)~~
@@ -73,9 +73,9 @@ Sync apis won't be supported
 - ~~fs.mkdirSync(path[, mode])~~
 - [ ] fs.readdir(path, callback)
 - ~~fs.readdirSync(path)~~
-- [ ] fs.close(fd, callback)
+- [x] fs.close(fd, callback)
 - ~~fs.closeSync(fd)~~
-- [ ] fs.open(path, flags[, mode], callback)
+- [x] fs.open(path, flags[, mode], callback)
 - ~~fs.openSync(path, flags[, mode])~~
 - [ ] fs.utimes(path, atime, mtime, callback)
 - ~~fs.utimesSync(path, atime, mtime)~~
@@ -84,7 +84,7 @@ Sync apis won't be supported
 - ~~fs.fsync(fd, callback)~~
 - ~~fs.fsyncSync(fd)~~
 - [ ] fs.write(fd, buffer, offset, length[, position], callback)
-- [ ] fs.write(fd, data[, position[, encoding]], callback)
+- [x] fs.write(fd, data[, position[, encoding]], callback)
 - ~~fs.writeSync(fd, buffer, offset, length[, position])~~
 - ~~fs.writeSync(fd, data[, position[, encoding]])~~
 - [ ] fs.read(fd, buffer, offset, length, position, callback)
