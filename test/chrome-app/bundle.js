@@ -5644,26 +5644,62 @@ exports.rename = function (oldPath, newPath, callback) {
   if (!nullCheck(newPath, callback)) {
     return
   }
-
+  oldPath = trimSlashes(oldPath)
+  newPath = trimSlashes(newPath)
   var tmpPath = newPath.split('/')
   var newFileName = tmpPath.pop()
   var toDirectory = tmpPath.join('/')
+  if (toDirectory === '') {
+    toDirectory = '/'
+  }
+  console.log('oldPath ' + oldPath)
+  console.log('toDirectory ' + toDirectory)
+  console.log('newFileName ' + newFileName)
 
   window.requestFileSystem(
       window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
       function (cfs) {
-        cfs.root.getFile(
-              oldPath,
-              {},
+        cfs.root.getFile(oldPath, {},
               function (fileEntry) {
-                fileEntry.moveTo(toDirectory, newFileName, function () {
-                  callback()
-                }, function (err) {
-                  callback(err)
-                })
+                fileEntry.onerror = callback
+                cfs.root.getDirectory(toDirectory, {}, function (dirEntry) {
+                  fileEntry.moveTo(dirEntry, newFileName)
+                }, callback)
+                fileEntry.moveTo(toDirectory, newFileName, callback)
               }, callback)
       }, callback)
-  callback()
+}
+
+exports.ftruncate = function (fd, len, callback) {
+  if (util.isFunction(len)) {
+    callback = len
+    len = 0
+  } else if (util.isUndefined(len)) {
+    len = 0
+  }
+  var cb = makeCallback(callback)
+  fd.onerror = cb
+  fd.onwriteend = cb
+  fd.truncate(len)
+}
+
+exports.truncate = function (path, len, callback) {
+  if (util.isNumber(path)) {
+    return this.ftruncate(path, len, callback)
+  }
+  if (util.isFunction(len)) {
+    callback = len
+    len = 0
+  } else if (util.isUndefined(len)) {
+    len = 0
+  }
+
+  callback = maybeCallback(callback)
+  this.open(path, 'r+', function (er, fd) {
+    if (er) return callback(er)
+    fd.onwriteend = callback
+    fd.truncate(len)
+  })
 }
 
 exports.writeFile = function (path, data, options, cb) {
@@ -7120,8 +7156,24 @@ var rpt = document.getElementById('outputlist')
 
 test('api test', function (t) {
   t.plan(1)
-  fs.rename('', '', function () {
-    // t.ok(true, 'Rename')
+  var rnpath = '/file' + Date.now() + '-old.txt'
+  var rnstr = 'some content\n'
+  fs.open(rnpath, 'w', function (err, fd) {
+    if (err) {
+      throw 'error opening file: ' + err.message
+    }
+    fs.write(fd, rnstr, 0, function (err) {
+      if (err) throw 'error writing file: ' + err
+
+      t.ok()
+      fs.close(fd, function () {
+        fs.rename(rnpath, 'file' + Date.now() + '-new.txt', function (err) {
+          if (err) {
+            console.log(err)
+          }
+        })
+      })
+    })
   })
 
   var path = '/file' + Date.now() + '.txt'

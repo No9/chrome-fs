@@ -93,26 +93,30 @@ exports.rename = function (oldPath, newPath, callback) {
   if (!nullCheck(newPath, callback)) {
     return
   }
-
+  oldPath = trimSlashes(oldPath)
+  newPath = trimSlashes(newPath)
   var tmpPath = newPath.split('/')
   var newFileName = tmpPath.pop()
   var toDirectory = tmpPath.join('/')
+  if (toDirectory === '') {
+    toDirectory = '/'
+  }
+  console.log('oldPath ' + oldPath)
+  console.log('toDirectory ' + toDirectory)
+  console.log('newFileName ' + newFileName)
 
   window.requestFileSystem(
       window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
       function (cfs) {
-        cfs.root.getFile(
-              oldPath,
-              {},
+        cfs.root.getFile(oldPath, {},
               function (fileEntry) {
-                fileEntry.moveTo(toDirectory, newFileName, function () {
-                  callback()
-                }, function (err) {
-                  callback(err)
-                })
+                fileEntry.onerror = callback
+                cfs.root.getDirectory(toDirectory, {}, function (dirEntry) {
+                  fileEntry.moveTo(dirEntry, newFileName)
+                }, callback)
+                fileEntry.moveTo(toDirectory, newFileName, callback)
               }, callback)
       }, callback)
-  callback()
 }
 
 exports.ftruncate = function (fd, len, callback) {
@@ -123,19 +127,28 @@ exports.ftruncate = function (fd, len, callback) {
     len = 0
   }
   var cb = makeCallback(callback)
-  window.requestFileSystem(
-        window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
-        function (cfs) {
-          cfs.root.getFile(
-                path,
-                {create: true, exclusive: true},
-                function (fileEntry) {
-                  fileEntry.createWriter(function (fileWriter) {
-                    fileWriter.onwriteend = cb
-                    fileWriter.truncate(len)
-                  }, callback)
-                }, callback)
-        }, callback)
+  fd.onerror = cb
+  fd.onwriteend = cb
+  fd.truncate(len)
+}
+
+exports.truncate = function (path, len, callback) {
+  if (util.isNumber(path)) {
+    return this.ftruncate(path, len, callback)
+  }
+  if (util.isFunction(len)) {
+    callback = len
+    len = 0
+  } else if (util.isUndefined(len)) {
+    len = 0
+  }
+
+  callback = maybeCallback(callback)
+  this.open(path, 'r+', function (er, fd) {
+    if (er) return callback(er)
+    fd.onwriteend = callback
+    fd.truncate(len)
+  })
 }
 
 exports.writeFile = function (path, data, options, cb) {
