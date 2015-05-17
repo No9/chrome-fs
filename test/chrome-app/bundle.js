@@ -5687,13 +5687,15 @@ exports.open = function (path, flags, mode, callback) {
 
 exports.write = function (fd, buffer, offset, length, position, callback) {
   if (util.isBuffer(buffer)) {
-    // if no position is passed then assume null
     if (util.isFunction(position)) {
       callback = position
       position = null
     }
     callback = maybeCallback(callback)
-    // return binding.writeBuffer(fd, buffer, offset, length, position, req)
+    fd.onerror = callback
+    var bufblob = new Blob([buffer.slice(offset, length)], {type: 'application/octet-binary'}) // eslint-disable-line
+    fd.write(bufblob)
+    callback()
   }
 
   if (util.isString(buffer)) {
@@ -7115,9 +7117,6 @@ test('api test', function (t) {
       if (err) throw 'error writing file: ' + err
 
       t.ok()
-        /*fs.close(fd, function() {
-            console.log('file written');
-        })*/
       fs.close(fd, function () {
         fs.unlink(path, function (err) {
           if (err) {

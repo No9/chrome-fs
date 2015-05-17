@@ -143,7 +143,6 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
     callback = maybeCallback(callback)
     fd.onerror = callback
     var bufblob = new Blob([buffer.slice(offset, length)], {type: 'application/octet-binary'}) // eslint-disable-line
-    
     fd.write(bufblob)
     callback()
   }
