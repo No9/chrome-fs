@@ -33,9 +33,9 @@ The following permissions need to be added to your chrome packaged app for this 
 
 Sync apis won't be supported 
 
-- [ ] rs.rename(oldPath, newPath, callback)
+- [x] rs.rename(oldPath, newPath, callback)
 - ~~fs.renameSync(oldPath, newPath)~~ 
-- [ ] fs.ftruncate(fd, len, callback)
+- [x] fs.ftruncate(fd, len, callback)
 - ~~[ ] fs.ftruncateSync(fd, len)~~
 - [ ] fs.truncate(path, len, callback)
 - ~~fs.truncateSync(path, len)~~

@@ -115,6 +115,29 @@ exports.rename = function (oldPath, newPath, callback) {
   callback()
 }
 
+exports.ftruncate = function (fd, len, callback) {
+  if (util.isFunction(len)) {
+    callback = len
+    len = 0
+  } else if (util.isUndefined(len)) {
+    len = 0
+  }
+  var cb = makeCallback(callback)
+  window.requestFileSystem(
+        window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+        function (cfs) {
+          cfs.root.getFile(
+                path,
+                {create: true, exclusive: true},
+                function (fileEntry) {
+                  fileEntry.createWriter(function (fileWriter) {
+                    fileWriter.onwriteend = cb
+                    fileWriter.truncate(len)
+                  }, callback)
+                }, callback)
+        }, callback)
+}
+
 exports.writeFile = function (path, data, options, cb) {
   var callback = maybeCallback(arguments[arguments.length - 1])
 
