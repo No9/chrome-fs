@@ -94,6 +94,24 @@ exports.rename = function (oldPath, newPath, callback) {
     return
   }
 
+  var tmpPath = newPath.split('/')
+  var newFileName = tmpPath.pop()
+  var toDirectory = tmpPath.join('/')
+
+  window.requestFileSystem(
+      window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+      function (cfs) {
+        cfs.root.getFile(
+              oldPath,
+              {},
+              function (fileEntry) {
+                fileEntry.moveTo(toDirectory, newFileName, function () {
+                  callback()
+                }, function (err) {
+                  callback(err)
+                })
+              }, callback)
+      }, callback)
   callback()
 }
 
