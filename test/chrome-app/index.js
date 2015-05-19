@@ -46,6 +46,17 @@ test('api test', function (t) {
       })
     })
   })
+
+  fs.open('/file1432077185603-new.txt', 'r', function (err, fd) {
+    if (err) {
+      throw 'error opening file: ' + err
+    }
+    var buffer = new Buffer(8192)
+    fs.read(fd, buffer, 0, 8192, -1, function (err) {
+      if (err) throw 'error writing file: ' + err
+      console.log('read callback called')
+    })
+  })
 /*
   var filelocation = '/test.txt'
   fs.writeFile(filelocation, 'Some lorum impsum', function () {

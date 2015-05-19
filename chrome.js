@@ -176,16 +176,69 @@ exports.open = function (path, flags, mode, callback) {
         window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
         function (cfs) {
           console.log('Filesystem: ' + cfs)
+          var opts = {}
+          if (flags === 'w') {
+            opts = {create: true, exclusive: true}
+          }
           cfs.root.getFile(
                 path,
-                {create: true, exclusive: true},
+                opts,
                 function (fileEntry) {
                   console.log('fileEntry: ' + fileEntry)
-                  fileEntry.createWriter(function (fileWriter) {
-                    callback(null, fileWriter)
-                  }, callback)
+                  // if its a write then we get the file writer
+                  // otherwise we get the file because 'standards'
+                  if (flags === 'w') {
+                    fileEntry.createWriter(function (fileWriter) {
+                      callback(null, fileWriter)
+                    }, callback)
+                  } else {
+                    callback(null, fileEntry)
+                  }
                 }, callback)
         }, callback)
+}
+
+exports.read = function (fd, buffer, offset, length, position, callback) {
+  if (!util.isBuffer(buffer)) {
+    console.log('THIS ISNT A BUFFER')
+    // legacy string interface (fd, length, position, encoding, callback)
+    var cb = arguments[4],
+        encoding = arguments[3]
+
+    assertEncoding(encoding)
+
+    position = arguments[2]
+    length = arguments[1]
+    buffer = new Buffer(length)
+    offset = 0
+
+    callback = function (err, bytesRead) {
+      if (!cb) return
+
+      var str = (bytesRead > 0) ? buffer.toString(encoding, 0, bytesRead) : '' // eslint-disable-line
+
+      (cb) (err, str, bytesRead)
+    }
+  }
+  fd.onerror = callback
+  fd.file(function (file) {
+    var fileReader = new FileReader() // eslint-disable-line
+    console.log('created file reader')
+    fileReader.onload = function (evt) {
+      console.log(this.result)
+      // (err, bytesRead, buffer)
+      callback(null, this.result.length, this.result)
+    }
+    fileReader.onerror = function (evt) {
+      callback(evt, null)
+    }
+
+    if (file.type === 'text/plain') {
+      fileReader.readAsText(file)
+    } else if (file.type === 'application/octet-binary') {
+      fileReader.readAsArrayBuffer(file)
+    }
+  }, callback)
 }
 
 exports.write = function (fd, buffer, offset, length, position, callback) {
@@ -214,6 +267,7 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
     }
     length = 'utf8'
   }
+  console.log(fd)
   callback = maybeCallback(position)
   fd.onerror = callback
   var blob = new Blob([buffer], {type: 'text/plain'}) // eslint-disable-line
