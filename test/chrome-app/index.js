@@ -52,9 +52,9 @@ test('api test', function (t) {
       throw 'error opening file: ' + err
     }
     var buffer = new Buffer(8192)
-    fs.read(fd, buffer, 0, 8192, -1, function (err) {
+    fs.read(fd, buffer, 0, 8192, -1, function (err, len, data) {
       if (err) throw 'error writing file: ' + err
-      console.log('read callback called')
+      console.log('read callback called ' + data)
     })
   })
 /*

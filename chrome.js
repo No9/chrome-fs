@@ -192,7 +192,9 @@ exports.open = function (path, flags, mode, callback) {
                       callback(null, fileWriter)
                     }, callback)
                   } else {
-                    callback(null, fileEntry)
+                    fileEntry.file(function (file) {
+                      callback(null, file)
+                    })
                   }
                 }, callback)
         }, callback)
@@ -214,13 +216,26 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
 
     callback = function (err, bytesRead) {
       if (!cb) return
-
       var str = (bytesRead > 0) ? buffer.toString(encoding, 0, bytesRead) : '' // eslint-disable-line
-
       (cb) (err, str, bytesRead)
     }
   }
   fd.onerror = callback
+  var data = fd.slice(offset, length)
+  var fileReader = new FileReader() // eslint-disable-line
+  fileReader.onload = function (evt) {
+    callback(null, this.result.length, this.result)
+  }
+  fileReader.onerror = function (evt) {
+    callback(evt, null)
+  }
+
+  if (fd.type === 'text/plain') {
+    fileReader.readAsText(data)
+  } else if (fd.type === 'application/octet-binary') {
+    fileReader.readAsArrayBuffer(data)
+  }
+  /*
   fd.file(function (file) {
     var fileReader = new FileReader() // eslint-disable-line
     console.log('created file reader')
@@ -238,7 +253,7 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
     } else if (file.type === 'application/octet-binary') {
       fileReader.readAsArrayBuffer(file)
     }
-  }, callback)
+  }, callback)*/
 }
 
 exports.write = function (fd, buffer, offset, length, position, callback) {
