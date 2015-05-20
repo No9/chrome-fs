@@ -16,10 +16,21 @@ test('api test', function (t) {
 
       t.ok()
       fs.close(fd, function () {
-        fs.rename(rnpath, 'file' + Date.now() + '-new.txt', function (err) {
+        var npath = 'file' + Date.now() + '-new.txt'
+        fs.rename(rnpath, npath, function (err) {
           if (err) {
             console.log(err)
           }
+          fs.open(npath, 'r', function (err, fd) {
+            if (err) {
+              throw 'error opening file: ' + err
+            }
+            var buffer = new Buffer(8192)
+            fs.read(fd, buffer, 0, 8192, -1, function (err, len, data) {
+              if (err) throw 'error writing file: ' + err
+              console.log('read callback called ' + data)
+            })
+          })
         })
       })
     })
@@ -47,16 +58,6 @@ test('api test', function (t) {
     })
   })
 
-  fs.open('/file1432077185603-new.txt', 'r', function (err, fd) {
-    if (err) {
-      throw 'error opening file: ' + err
-    }
-    var buffer = new Buffer(8192)
-    fs.read(fd, buffer, 0, 8192, -1, function (err, len, data) {
-      if (err) throw 'error writing file: ' + err
-      console.log('read callback called ' + data)
-    })
-  })
 /*
   var filelocation = '/test.txt'
   fs.writeFile(filelocation, 'Some lorum impsum', function () {
