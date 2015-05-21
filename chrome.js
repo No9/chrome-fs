@@ -64,7 +64,7 @@ function rethrow () {
   }
 }
 
-function trimSlashes (path) {
+function resolve (path) {
   var retString = path
   if (retString[0] === '/') {
     retString = retString.slice(1)
@@ -72,6 +72,12 @@ function trimSlashes (path) {
   if (retString[retString.length - 1] === '/') {
     retString = retString.slice(0, retString.length - 1)
   }
+
+  if (retString === '.') {
+    retString = ''
+  }
+
+  retString = retString.replace('../', '')
   return retString
 }
 
@@ -95,7 +101,7 @@ function modeNum (m, def) {
 }
 
 exports.chown = function (path, uid, gid, callback) {
-  trimSlashes(path)
+  resolve(path)
   callback = makeCallback(callback)
   if (!nullCheck(path, callback)) return
 
@@ -113,7 +119,7 @@ exports.fchown = function (fd, uid, gid, callback) {
 }
 
 exports.chmod = function (path, mode, callback) {
-  trimSlashes(path)
+  resolve(path)
   callback = makeCallback(callback)
   if (!nullCheck(path, callback)) return
 
@@ -131,7 +137,7 @@ exports.fchmod = function (fd, mode, callback) {
 }
 
 exports.exists = function (path, callback) {
-  trimSlashes(path)
+  resolve(path)
   window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
       function (cfs) {
         cfs.root.getFile(path, {},
@@ -144,7 +150,7 @@ exports.exists = function (path, callback) {
 }
 
 exports.mkdir = function (path, mode, callback) {
-  trimSlashes(path)
+  resolve(path)
   if (util.isFunction(mode)) callback = mode
   callback = makeCallback(callback)
   if (!nullCheck(path, callback)) return
@@ -159,7 +165,7 @@ exports.mkdir = function (path, mode, callback) {
 }
 
 exports.rmdir = function (path, callback) {
-  trimSlashes(path)
+  resolve(path)
   callback = maybeCallback(callback)
   if (!nullCheck(path, callback)) return
 
@@ -175,7 +181,7 @@ exports.rmdir = function (path, callback) {
 }
 
 exports.readdir = function (path, callback) {
-  trimSlashes(path)
+  resolve(path)
   window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
       function (cfs) {
         cfs.root.getDirectory(path, {}, function (dirEntry) {
@@ -201,8 +207,8 @@ exports.rename = function (oldPath, newPath, callback) {
   if (!nullCheck(newPath, callback)) {
     return
   }
-  oldPath = trimSlashes(oldPath)
-  newPath = trimSlashes(newPath)
+  oldPath = resolve(oldPath)
+  newPath = resolve(newPath)
   var tmpPath = newPath.split('/')
   var newFileName = tmpPath.pop()
   var toDirectory = tmpPath.join('/')
@@ -258,6 +264,7 @@ exports.truncate = function (path, len, callback) {
 }
 
 exports.stat = function (path, callback) {
+  path = resolve(path)
   window.requestFileSystem(
         window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
         function (cfs) {
@@ -301,7 +308,7 @@ exports.writeFile = function (path, data, options, cb) {
 }
 
 exports.open = function (path, flags, mode, callback) {
-  path = trimSlashes(path)
+  path = resolve(path)
   callback = makeCallback(arguments[arguments.length - 1])
   mode = modeNum(mode, 438 /*=0666*/)
 
@@ -447,7 +454,7 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
 }
 
 exports.unlink = function (fd, callback) {
-  var path = trimSlashes(fd)
+  var path = resolve(fd)
   window.requestFileSystem(
         window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
         function (cfs) {

@@ -28,6 +28,16 @@ The following permissions need to be added to your chrome packaged app for this 
   	"filesystem"
   ]
 ```
+## Caveats 
+
+Chrome Packaged Apps don't have the notion of current working directory ```CWD```.
+So relative paths are not escapted they are trimmed to be relative from root 
+i.e. 
+`../../direct1/file1` Will resolve to `/direct1/file1`
+
+`.` Will resolve to `/`
+
+If there is a more involved implementation required then please raise an issue. 
 
 ## API Status 
 

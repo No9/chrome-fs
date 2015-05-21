@@ -5615,7 +5615,7 @@ function rethrow () {
   }
 }
 
-function trimSlashes (path) {
+function resolve (path) {
   var retString = path
   if (retString[0] === '/') {
     retString = retString.slice(1)
@@ -5623,6 +5623,12 @@ function trimSlashes (path) {
   if (retString[retString.length - 1] === '/') {
     retString = retString.slice(0, retString.length - 1)
   }
+
+  if (retString === '.') {
+    retString = ''
+  }
+
+  retString = retString.replace('../', '')
   return retString
 }
 
@@ -5646,7 +5652,7 @@ function modeNum (m, def) {
 }
 
 exports.chown = function (path, uid, gid, callback) {
-  trimSlashes(path)
+  resolve(path)
   callback = makeCallback(callback)
   if (!nullCheck(path, callback)) return
 
@@ -5664,7 +5670,7 @@ exports.fchown = function (fd, uid, gid, callback) {
 }
 
 exports.chmod = function (path, mode, callback) {
-  trimSlashes(path)
+  resolve(path)
   callback = makeCallback(callback)
   if (!nullCheck(path, callback)) return
 
@@ -5682,7 +5688,7 @@ exports.fchmod = function (fd, mode, callback) {
 }
 
 exports.exists = function (path, callback) {
-  trimSlashes(path)
+  resolve(path)
   window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
       function (cfs) {
         cfs.root.getFile(path, {},
@@ -5695,7 +5701,7 @@ exports.exists = function (path, callback) {
 }
 
 exports.mkdir = function (path, mode, callback) {
-  trimSlashes(path)
+  resolve(path)
   if (util.isFunction(mode)) callback = mode
   callback = makeCallback(callback)
   if (!nullCheck(path, callback)) return
@@ -5710,7 +5716,7 @@ exports.mkdir = function (path, mode, callback) {
 }
 
 exports.rmdir = function (path, callback) {
-  trimSlashes(path)
+  resolve(path)
   callback = maybeCallback(callback)
   if (!nullCheck(path, callback)) return
 
@@ -5726,7 +5732,7 @@ exports.rmdir = function (path, callback) {
 }
 
 exports.readdir = function (path, callback) {
-  trimSlashes(path)
+  resolve(path)
   window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
       function (cfs) {
         cfs.root.getDirectory(path, {}, function (dirEntry) {
@@ -5752,8 +5758,8 @@ exports.rename = function (oldPath, newPath, callback) {
   if (!nullCheck(newPath, callback)) {
     return
   }
-  oldPath = trimSlashes(oldPath)
-  newPath = trimSlashes(newPath)
+  oldPath = resolve(oldPath)
+  newPath = resolve(newPath)
   var tmpPath = newPath.split('/')
   var newFileName = tmpPath.pop()
   var toDirectory = tmpPath.join('/')
@@ -5809,6 +5815,7 @@ exports.truncate = function (path, len, callback) {
 }
 
 exports.stat = function (path, callback) {
+  path = resolve(path)
   window.requestFileSystem(
         window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
         function (cfs) {
@@ -5852,7 +5859,7 @@ exports.writeFile = function (path, data, options, cb) {
 }
 
 exports.open = function (path, flags, mode, callback) {
-  path = trimSlashes(path)
+  path = resolve(path)
   callback = makeCallback(arguments[arguments.length - 1])
   mode = modeNum(mode, 438 /*=0666*/)
 
@@ -5998,7 +6005,7 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
 }
 
 exports.unlink = function (fd, callback) {
-  var path = trimSlashes(fd)
+  var path = resolve(fd)
   window.requestFileSystem(
         window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
         function (cfs) {
@@ -7716,10 +7723,148 @@ function through (write, end, opts) {
 
 }).call(this,require('_process'))
 },{"_process":12,"stream":24}],41:[function(require,module,exports){
+(function (process,global,__filename){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var assert = require('assert')
+var fs = require('../../chrome')
+var got_error = false
+var success_count = 0
+
+fs.stat('.', function (err, stats) {
+  if (err) {
+    got_error = true
+  } else {
+    console.dir(stats)
+    assert.ok(stats.mtime instanceof Date)
+    success_count++
+  }
+  assert(this === global)
+})
+
+fs.stat('.', function (err, stats) {
+  if (err) {
+    got_error = true
+  }
+  assert.ok(stats.hasOwnProperty('blksize'))
+  assert.ok(stats.hasOwnProperty('blocks'))
+})
+/*
+fs.lstat('.', function (err, stats) {
+  if (err) {
+    got_error = true
+  } else {
+    console.dir(stats)
+    assert.ok(stats.mtime instanceof Date)
+    success_count++
+  }
+  assert(this === global)
+})
+*/
+// fstat
+fs.open('.', 'r', undefined, function (err, fd) {
+  assert.ok(!err)
+  assert.ok(fd)
+
+  fs.fstat(fd, function (err, stats) {
+    if (err) {
+      got_error = true
+    } else {
+      console.dir(stats)
+      assert.ok(stats.mtime instanceof Date)
+      success_count++
+      fs.close(fd)
+    }
+    assert(this === global)
+  })
+
+  assert(this === global)
+})
+
+// fstatSync
+fs.open('.', 'r', undefined, function (err, fd) {
+  if (err) {
+    got_error = true
+  }
+  var stats
+  try {
+    stats = fs.fstatSync(fd)
+  } catch (err) {
+    got_error = true
+  }
+  if (stats) {
+    console.dir(stats)
+    assert.ok(stats.mtime instanceof Date)
+    success_count++
+  }
+  fs.close(fd)
+})
+
+console.log('stating: ' + __filename)
+fs.stat(__filename, function (err, s) {
+  if (err) {
+    got_error = true
+  } else {
+    console.dir(s)
+    success_count++
+
+    console.log('isDirectory: ' + JSON.stringify(s.isDirectory()))
+    assert.equal(false, s.isDirectory())
+
+    console.log('isFile: ' + JSON.stringify(s.isFile()))
+    assert.equal(true, s.isFile())
+
+    console.log('isSocket: ' + JSON.stringify(s.isSocket()))
+    assert.equal(false, s.isSocket())
+
+    console.log('isBlockDevice: ' + JSON.stringify(s.isBlockDevice()))
+    assert.equal(false, s.isBlockDevice())
+
+    console.log('isCharacterDevice: ' + JSON.stringify(s.isCharacterDevice()))
+    assert.equal(false, s.isCharacterDevice())
+
+    console.log('isFIFO: ' + JSON.stringify(s.isFIFO()))
+    assert.equal(false, s.isFIFO())
+
+    console.log('isSymbolicLink: ' + JSON.stringify(s.isSymbolicLink()))
+    assert.equal(false, s.isSymbolicLink())
+
+    assert.ok(s.mtime instanceof Date)
+  }
+})
+
+process.on('exit', function () {
+  assert.equal(5, success_count)
+  assert.equal(false, got_error)
+})
+
+}).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {},"/test\\simple\\test-fs-stat.js")
+},{"../../chrome":28,"_process":12,"assert":2}],42:[function(require,module,exports){
 (function (Buffer){
 var fs = require('../../chrome')
 var assert = require('assert')
 var test = require('tape')
+var test_fs_stat = require('../simple/test-fs-stat') // eslint-disable-line
+
 var rpt = document.getElementById('outputlist')
 
 test('api test', function (t) {
@@ -7824,4 +7969,4 @@ test.createStream().on('data', function (row) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"assert":2,"buffer":4,"tape":29}]},{},[41]);
+},{"../../chrome":28,"../simple/test-fs-stat":41,"assert":2,"buffer":4,"tape":29}]},{},[42]);
