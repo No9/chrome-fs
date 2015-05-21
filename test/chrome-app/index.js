@@ -21,19 +21,44 @@ test('api test', function (t) {
           if (err) {
             console.log(err)
           }
+          console.log(npath + ' trying to open')
           fs.open(npath, 'r', function (err, fd) {
             if (err) {
               throw 'error opening file: ' + err
             }
             var buffer = new Buffer(8192)
+            console.log('Reading Buffer')
             fs.read(fd, buffer, 0, 8192, -1, function (err, len, data) {
               if (err) throw 'error writing file: ' + err
               console.log('read callback called ' + data)
+              fs.stat(npath, function (err, data) {
+                if (err) {
+                  throw 'error opening file: ' + err
+                }
+                console.log(data)
+              })
             })
+
           })
         })
       })
     })
+  })
+
+  var dirname = Date.now()
+
+  fs.mkdir(dirname, function () {
+    console.log('mkdir success')
+    fs.rmdir(dirname, function () {
+      console.log('rmdir success')
+    })
+  })
+
+  fs.readdir('/', function (err, entities) {
+    if (err) {
+      throw 'error opening dir' + err
+    }
+    console.log(entities)
   })
 
   var path = '/file' + Date.now() + '.txt'

@@ -5548,13 +5548,24 @@ function hasOwnProperty(obj, prop) {
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"./support/isBuffer":26,"_process":12,"inherits":9}],28:[function(require,module,exports){
-(function (process,Buffer){
+(function (process){
 var util = require('util')
+var Buffer = require('buffer').Buffer
+var Stream = require('stream').Stream
+var Readable = Stream.Readable
+var Writable = Stream.Writable
 
 var FILESYSTEM_DEFAULT_SIZE = 250 * 1024 * 1024	// 250MB
 var DEBUG = true
+var kMinPoolSpace = 128
+var pool
 
 window.requestFileSystem = window.requestFileSystem || window.webkitRequestFileSystem
+
+function allocNewPool (poolSize) {
+  pool = new Buffer(poolSize)
+  pool.used = 0
+}
 
 function nullCheck (path, callback) {
   if (('' + path).indexOf('\u0000') !== -1) {
@@ -5634,6 +5645,103 @@ function modeNum (m, def) {
   return undefined
 }
 
+exports.chown = function (path, uid, gid, callback) {
+  trimSlashes(path)
+  callback = makeCallback(callback)
+  if (!nullCheck(path, callback)) return
+
+  this.exists(path, function (exists) {
+    if (exists) {
+      callback()
+    } else {
+      callback('File does not exist')
+    }
+  })
+}
+
+exports.fchown = function (fd, uid, gid, callback) {
+  this.chown(fd.filePath, uid, gid, callback)
+}
+
+exports.chmod = function (path, mode, callback) {
+  trimSlashes(path)
+  callback = makeCallback(callback)
+  if (!nullCheck(path, callback)) return
+
+  this.exists(path, function (exists) {
+    if (exists) {
+      callback()
+    } else {
+      callback('File does not exist')
+    }
+  })
+}
+
+exports.fchmod = function (fd, mode, callback) {
+  this.chmod(fd.filePath, mode, callback)
+}
+
+exports.exists = function (path, callback) {
+  trimSlashes(path)
+  window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+      function (cfs) {
+        cfs.root.getFile(path, {},
+              function (fileEntry) {
+                callback(true)
+              }, function () {
+                callback(false)
+              })
+      }, function () { callback(false) })
+}
+
+exports.mkdir = function (path, mode, callback) {
+  trimSlashes(path)
+  if (util.isFunction(mode)) callback = mode
+  callback = makeCallback(callback)
+  if (!nullCheck(path, callback)) return
+
+  window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+      function (cfs) {
+        cfs.root.getDirectory(path, {create: true},
+              function (dirEntry) {
+                callback()
+              }, callback)
+      }, callback)
+}
+
+exports.rmdir = function (path, callback) {
+  trimSlashes(path)
+  callback = maybeCallback(callback)
+  if (!nullCheck(path, callback)) return
+
+  window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+      function (cfs) {
+        cfs.root.getDirectory(path, {},
+              function (dirEntry) {
+                dirEntry.remove(function () {
+                  callback()
+                }, callback)
+              }, callback)
+      }, callback)
+}
+
+exports.readdir = function (path, callback) {
+  trimSlashes(path)
+  window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+      function (cfs) {
+        cfs.root.getDirectory(path, {}, function (dirEntry) {
+          var dirReader = dirEntry.createReader()
+          dirReader.readEntries(function (entries) {
+            var fullPathList = []
+            for (var i = 0; i < entries.length; i++) {
+              fullPathList.push(entries[i].fullPath)
+            }
+            callback(null, fullPathList)
+          }, callback)
+        }, callback)
+      }, callback)
+}
+
 exports.rename = function (oldPath, newPath, callback) {
   callback = makeCallback(callback)
 
@@ -5652,9 +5760,6 @@ exports.rename = function (oldPath, newPath, callback) {
   if (toDirectory === '') {
     toDirectory = '/'
   }
-  console.log('oldPath ' + oldPath)
-  console.log('toDirectory ' + toDirectory)
-  console.log('newFileName ' + newFileName)
 
   window.requestFileSystem(
       window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
@@ -5664,6 +5769,7 @@ exports.rename = function (oldPath, newPath, callback) {
                 fileEntry.onerror = callback
                 cfs.root.getDirectory(toDirectory, {}, function (dirEntry) {
                   fileEntry.moveTo(dirEntry, newFileName)
+                  callback()
                 }, callback)
                 fileEntry.moveTo(toDirectory, newFileName, callback)
               }, callback)
@@ -5702,6 +5808,34 @@ exports.truncate = function (path, len, callback) {
   })
 }
 
+exports.stat = function (path, callback) {
+  window.requestFileSystem(
+        window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+        function (cfs) {
+          var opts = {}
+          cfs.root.getFile(path, opts, function (fileEntry) {
+            fileEntry.file(function (file) {
+              var statval = { dev: 0,
+                              mode: 33206,
+                              nlink: 0,
+                              uid: 0,
+                              gid: 0,
+                              rdev: 0,
+                              ino: 0,
+                              size: file.size,
+                              atime: null,
+                              mtime: file.lastModifiedDate,
+                              ctime: null }
+              callback(null, statval)
+            })
+          }, callback)
+        }, callback)
+}
+
+exports.fstat = function (fd, callback) {
+  this.stat(fd.filePath, callback)
+}
+
 exports.writeFile = function (path, data, options, cb) {
   var callback = maybeCallback(arguments[arguments.length - 1])
 
@@ -5726,7 +5860,6 @@ exports.open = function (path, flags, mode, callback) {
   window.requestFileSystem(
         window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
         function (cfs) {
-          console.log('Filesystem: ' + cfs)
           var opts = {}
           if (flags === 'w') {
             opts = {create: true, exclusive: true}
@@ -5735,11 +5868,11 @@ exports.open = function (path, flags, mode, callback) {
                 path,
                 opts,
                 function (fileEntry) {
-                  console.log('fileEntry: ' + fileEntry)
                   // if its a write then we get the file writer
                   // otherwise we get the file because 'standards'
                   if (flags === 'w') {
                     fileEntry.createWriter(function (fileWriter) {
+                      fileWriter.fullPath = fileEntry.fullPath
                       callback(null, fileWriter)
                     }, callback)
                   } else {
@@ -5753,10 +5886,9 @@ exports.open = function (path, flags, mode, callback) {
 
 exports.read = function (fd, buffer, offset, length, position, callback) {
   if (!util.isBuffer(buffer)) {
-    console.log('THIS ISNT A BUFFER')
     // legacy string interface (fd, length, position, encoding, callback)
-    var cb = arguments[4],
-        encoding = arguments[3]
+    var cb = arguments[4]
+    var encoding = arguments[3]
 
     assertEncoding(encoding)
 
@@ -5786,25 +5918,47 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
   } else if (fd.type === 'application/octet-binary') {
     fileReader.readAsArrayBuffer(data)
   }
-  /*
-  fd.file(function (file) {
-    var fileReader = new FileReader() // eslint-disable-line
-    console.log('created file reader')
-    fileReader.onload = function (evt) {
-      console.log(this.result)
-      // (err, bytesRead, buffer)
-      callback(null, this.result.length, this.result)
-    }
-    fileReader.onerror = function (evt) {
-      callback(evt, null)
-    }
+}
 
-    if (file.type === 'text/plain') {
-      fileReader.readAsText(file)
-    } else if (file.type === 'application/octet-binary') {
-      fileReader.readAsArrayBuffer(file)
-    }
-  }, callback)*/
+exports.readFile = function (path, options, cb) {
+  var callback = maybeCallback(arguments[arguments.length - 1])
+
+  if (util.isFunction(options) || !options) {
+    options = { encoding: null, flag: 'r' }
+  } else if (util.isString(options)) {
+    options = { encoding: options, flag: 'r' }
+  } else if (!util.isObject(options)) {
+    throw new TypeError('Bad arguments')
+  }
+
+  var encoding = options.encoding
+  assertEncoding(encoding)
+  window.requestFileSystem(
+      window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+      function (cfs) {
+        var opts = {}
+        cfs.root.getFile(
+              path,
+              opts,
+              function (fileEntry) {
+                fileEntry.file(function (file) {
+                  fileEntry.onerror = callback
+                  var fileReader = new FileReader() // eslint-disable-line
+                  fileReader.onload = function (evt) {
+                    callback(null, this.result)
+                  }
+                  fileReader.onerror = function (evt) {
+                    callback(evt, null)
+                  }
+
+                  if (file.type === 'text/plain') {
+                    fileReader.readAsText(file)
+                  } else if (file.type === 'application/octet-binary') {
+                    fileReader.readAsArrayBuffer(file)
+                  }
+                })
+              }, callback)
+      }, callback)
 }
 
 exports.write = function (fd, buffer, offset, length, position, callback) {
@@ -5833,7 +5987,6 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
     }
     length = 'utf8'
   }
-  console.log(fd)
   callback = maybeCallback(position)
   fd.onerror = callback
   var blob = new Blob([buffer], {type: 'text/plain'}) // eslint-disable-line
@@ -5858,10 +6011,355 @@ exports.unlink = function (fd, callback) {
         }, callback)
 }
 
+exports.writeFile = function (path, data, options, cb) {
+  var callback = maybeCallback(arguments[arguments.length - 1])
+
+  if (util.isFunction(options) || !options) {
+    options = { encoding: 'utf8', mode: 438, flag: 'w' }
+  } else if (util.isString(options)) {
+    options = { encoding: options, mode: 438, flag: 'w' }
+  } else if (!util.isObject(options)) {
+    throw new TypeError('Bad arguments')
+  }
+
+  assertEncoding(options.encoding)
+
+  var flag = options.flag || 'w' // eslint-disable-line
+
+  window.requestFileSystem(
+    window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+    function (cfs) {
+      var opts = {}
+      if (flag === 'w') {
+        opts = {create: true, exclusive: true}
+      }
+      cfs.root.getFile(
+            path,
+            opts,
+            function (fileEntry) {
+              // if its a write then we get the file writer
+              // otherwise we get the file because 'standards'
+              if (flag === 'w') {
+                fileEntry.createWriter(function (fileWriter) {
+                  fileWriter.onerror = callback
+                  fileWriter.onwriteend = callback
+                  var blob = new Blob([data], {type: 'text/plain'}) // eslint-disable-line
+                  fileWriter.write(blob)
+                  callback()
+                }, callback)
+              } else {
+                callback('incorrect flag')
+              }
+            }, callback)
+    }, callback)
+}
+
+exports.appendFile = function (path, data, options, cb) {
+  var callback = maybeCallback(arguments[arguments.length - 1])
+
+  if (util.isFunction(options) || !options) {
+    options = { encoding: 'utf8', mode: 438, flag: 'a' }
+  } else if (util.isString(options)) {
+    options = { encoding: options, mode: 438, flag: 'a' }
+  } else if (!util.isObject(options)) {
+    throw new TypeError('Bad arguments')
+  }
+
+  var flag = options.flag || 'w' // eslint-disable-line
+
+  window.requestFileSystem(
+    window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+    function (cfs) {
+      var opts = {}
+      if (flag === 'a') {
+        opts = {create: true, exclusive: true}
+      }
+      cfs.root.getFile(
+            path,
+            opts,
+            function (fileEntry) {
+              // if its a write then we get the file writer
+              // otherwise we get the file because 'standards'
+              if (flag === 'w') {
+                fileEntry.createWriter(function (fileWriter) {
+                  fileWriter.onerror = callback
+                  fileWriter.onwriteend = callback
+                  fileWriter.seek(fileWriter.length)
+                  var blob = new Blob([data], {type: 'text/plain'}) // eslint-disable-line
+                  fileWriter.write(blob)
+                  callback()
+                }, callback)
+              } else {
+                callback('incorrect flag')
+              }
+            }, callback)
+    }, callback)
+}
 exports.close = function (fd, callback) {
   fd.onwriteend = makeCallback(callback)
 }
 
+exports.createReadStream = function (path, options) {
+  return new ReadStream(path, options)
+}
+
+util.inherits(ReadStream, Readable)
+exports.ReadStream = ReadStream
+
+function ReadStream (path, options) {
+  if (!(this instanceof ReadStream)) {
+    return new ReadStream(path, options)
+  }
+  // a little bit bigger buffer and water marks by default
+  options = util._extend({
+    highWaterMark: 64 * 1024
+  }, options || {})
+
+  Readable.call(this, options)
+
+  this.path = path
+  this.fd = options.hasOwnProperty('fd') ? options.fd : null
+  this.flags = options.hasOwnProperty('flags') ? options.flags : 'r'
+  this.mode = options.hasOwnProperty('mode') ? options.mode : 438 /*=0666*/
+
+  this.start = options.hasOwnProperty('start') ? options.start : undefined
+  this.end = options.hasOwnProperty('end') ? options.end : undefined
+  this.autoClose = options.hasOwnProperty('autoClose') ?
+      options.autoClose : true
+  this.pos = undefined
+
+  if (!util.isUndefined(this.start)) {
+    if (!util.isNumber(this.start)) {
+      throw TypeError('start must be a Number')
+    }
+    if (util.isUndefined(this.end)) {
+      this.end = Infinity
+    } else if (!util.isNumber(this.end)) {
+      throw TypeError('end must be a Number')
+    }
+
+    if (this.start > this.end) {
+      throw new Error('start must be <= end')
+    }
+
+    this.pos = this.start
+  }
+
+  if (!util.isNumber(this.fd)) {
+    this.open()
+  }
+  this.on('end', function () {
+    if (this.autoClose) {
+      this.destroy()
+    }
+  })
+}
+
+exports.FileReadStream = exports.ReadStream // support the legacy name
+
+ReadStream.prototype.open = function () {
+  var self = this
+  exports.open(this.path, this.flags, this.mode, function (er, fd) {
+    if (er) {
+      if (self.autoClose) {
+        self.destroy()
+      }
+      self.emit('error', er)
+      return
+    }
+
+    self.fd = fd
+    self.emit('open', fd)
+    // start the flow of data.
+    self.read()
+  })
+}
+
+ReadStream.prototype._read = function (n) {
+  if (!util.isNumber(this.fd)) {
+    return this.once('open', function () {
+      this._read(n)
+    })
+  }
+
+  if (this.destroyed) {
+    return
+  }
+
+  if (!pool || pool.length - pool.used < kMinPoolSpace) {
+    // discard the old pool.
+    pool = null
+    allocNewPool(this._readableState.highWaterMark)
+  }
+
+  // Grab another reference to the pool in the case that while we're
+  // in the thread pool another read() finishes up the pool, and
+  // allocates a new one.
+  var thisPool = pool
+  var toRead = Math.min(pool.length - pool.used, n)
+  var start = pool.used
+
+  if (!util.isUndefined(this.pos)) {
+    toRead = Math.min(this.end - this.pos + 1, toRead)
+  }
+
+  // already read everything we were supposed to read!
+  // treat as EOF.
+  if (toRead <= 0) {
+    return this.push(null)
+  }
+  // the actual read.
+  var self = this
+  exports.read(this.fd, pool, pool.used, toRead, this.pos, onread)
+
+  // move the pool positions, and internal position for reading.
+  if (!util.isUndefined(this.pos)) {
+    this.pos += toRead
+  }
+  pool.used += toRead
+
+  function onread (er, bytesRead) {
+    if (er) {
+      if (self.autoClose) {
+        self.destroy()
+      }
+      self.emit('error', er)
+    } else {
+      var b = null
+      if (bytesRead > 0) {
+        b = thisPool.slice(start, start + bytesRead)
+      }
+      self.push(b)
+    }
+  }
+}
+
+ReadStream.prototype.destroy = function () {
+  if (this.destroyed) {
+    return
+  }
+
+  this.destroyed = true
+
+  if (util.isNumber(this.fd)) {
+    this.close()
+  }
+}
+
+ReadStream.prototype.close = function (cb) {
+  var self = this
+  if (cb) {
+    this.once('close', cb)
+  }
+  if (this.closed || !util.isNumber(this.fd)) {
+    if (!util.isNumber(this.fd)) {
+      this.once('open', close)
+      return
+    }
+    return process.nextTick(this.emit.bind(this, 'close'))
+  }
+  this.closed = true
+  close()
+
+  function close (fd) {
+    exports.close(fd || self.fd, function (er) {
+      if (er) {
+        self.emit('error', er)
+      } else {
+        self.emit('close')
+      }
+    })
+    self.fd = null
+  }
+}
+
+exports.createWriteStream = function (path, options) {
+  return new WriteStream(path, options)
+}
+
+util.inherits(WriteStream, Writable)
+exports.WriteStream = WriteStream
+function WriteStream (path, options) {
+  if (!(this instanceof WriteStream)) {
+    return new WriteStream(path, options)
+  }
+  options = options || {}
+
+  Writable.call(this, options)
+
+  this.path = path
+  this.fd = null
+
+  this.fd = options.hasOwnProperty('fd') ? options.fd : null
+  this.flags = options.hasOwnProperty('flags') ? options.flags : 'w'
+  this.mode = options.hasOwnProperty('mode') ? options.mode : 438 /*=0666*/
+
+  this.start = options.hasOwnProperty('start') ? options.start : undefined
+  this.pos = undefined
+  this.bytesWritten = 0
+
+  if (!util.isUndefined(this.start)) {
+    if (!util.isNumber(this.start)) {
+      throw TypeError('start must be a Number')
+    }
+    if (this.start < 0) {
+      throw new Error('start must be >= zero')
+    }
+
+    this.pos = this.start
+  }
+
+  if (!util.isNumber(this.fd)) {
+    this.open()
+  }
+  // dispose on finish.
+  this.once('finish', this.close)
+}
+
+exports.FileWriteStream = exports.WriteStream // support the legacy name
+
+WriteStream.prototype.open = function () {
+  exports.open(this.path, this.flags, this.mode, function (er, fd) {
+    if (er) {
+      this.destroy()
+      this.emit('error', er)
+      return
+    }
+
+    this.fd = fd
+    this.emit('open', fd)
+  }.bind(this))
+}
+
+WriteStream.prototype._write = function (data, encoding, cb) {
+  if (!util.isBuffer(data)) {
+    return this.emit('error', new Error('Invalid data'))
+  }
+  if (!util.isNumber(this.fd)) {
+    return this.once('open', function () {
+      this._write(data, encoding, cb)
+    })
+  }
+  var self = this
+  exports.write(this.fd, data, 0, data.length, this.pos, function (er, bytes) {
+    if (er) {
+      self.destroy()
+      return cb(er)
+    }
+    self.bytesWritten += bytes
+    cb()
+  })
+
+  if (!util.isUndefined(this.pos)) {
+    this.pos += data.length
+  }
+}
+
+WriteStream.prototype.destroy = ReadStream.prototype.destroy
+WriteStream.prototype.close = ReadStream.prototype.close
+
+// There is no shutdown() for files.
+WriteStream.prototype.destroySoon = WriteStream.prototype.end
 /*
 fs.rename(oldPath, newPath, callback)
 fs.ftruncate(fd, len, callback)
@@ -5917,8 +6415,8 @@ Class: fs.FSWatcher
 	Event: 'error'
 */
 
-}).call(this,require('_process'),require("buffer").Buffer)
-},{"_process":12,"buffer":4,"util":27}],29:[function(require,module,exports){
+}).call(this,require('_process'))
+},{"_process":12,"buffer":4,"stream":24,"util":27}],29:[function(require,module,exports){
 (function (process){
 var defined = require('defined');
 var createDefaultStream = require('./lib/default_stream');
@@ -7242,19 +7740,44 @@ test('api test', function (t) {
           if (err) {
             console.log(err)
           }
+          console.log(npath + ' trying to open')
           fs.open(npath, 'r', function (err, fd) {
             if (err) {
               throw 'error opening file: ' + err
             }
             var buffer = new Buffer(8192)
+            console.log('Reading Buffer')
             fs.read(fd, buffer, 0, 8192, -1, function (err, len, data) {
               if (err) throw 'error writing file: ' + err
               console.log('read callback called ' + data)
+              fs.stat(npath, function (err, data) {
+                if (err) {
+                  throw 'error opening file: ' + err
+                }
+                console.log(data)
+              })
             })
+
           })
         })
       })
     })
+  })
+
+  var dirname = Date.now()
+
+  fs.mkdir(dirname, function () {
+    console.log('mkdir success')
+    fs.rmdir(dirname, function () {
+      console.log('rmdir success')
+    })
+  })
+
+  fs.readdir('/', function (err, entities) {
+    if (err) {
+      throw 'error opening dir' + err
+    }
+    console.log(entities)
   })
 
   var path = '/file' + Date.now() + '.txt'
