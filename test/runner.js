@@ -15,6 +15,9 @@ switch (os.platform()) {
   case 'darwin' :
     CHROME = process.env.CHROME || '/Applications/Google\\ Chrome\\ Canary.app/Contents/MacOS/Google\\ Chrome\\ Canary'
     break
+  case 'linux' :
+    CHROME = process.env.CHROME || '/opt/google/chrome/chrome'
+    break
   default :
     break
 }
