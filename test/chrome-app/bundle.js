@@ -6070,8 +6070,6 @@ exports.writeFile = function (path, data, options, cb) {
   assertEncoding(options.encoding)
 
   var flag = options.flag || 'w' // eslint-disable-line
-  console.log(flag)
-  console.log('FLAG')
   window.requestFileSystem(
     window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
     function (cfs) {
@@ -6121,7 +6119,7 @@ exports.appendFile = function (path, data, options, cb) {
     throw new TypeError('Bad arguments')
   }
 
-  var flag = options.flag || 'w' // eslint-disable-line
+  var flag = options.flag || 'a' // eslint-disable-line
 
   window.requestFileSystem(
     window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
@@ -6136,10 +6134,17 @@ exports.appendFile = function (path, data, options, cb) {
             function (fileEntry) {
               // if its a write then we get the file writer
               // otherwise we get the file because 'standards'
-              if (flag === 'w') {
+              if (flag === 'a') {
                 fileEntry.createWriter(function (fileWriter) {
                   fileWriter.onerror = callback
-                  fileWriter.onwriteend = callback
+                  if (typeof callback === 'function') {
+                    fileWriter.onwriteend = function (evt) {
+                      callback(null, evt)
+                    }
+                  } else {
+                    fileWriter.onwriteend = function () {}
+                  }
+                  fileWriter.onprogress = function () {}
                   fileWriter.seek(fileWriter.length)
                   var blob = new Blob([data], {type: 'text/plain'}) // eslint-disable-line
                   fileWriter.write(blob)
@@ -6151,6 +6156,7 @@ exports.appendFile = function (path, data, options, cb) {
             }, callback)
     }, callback)
 }
+
 exports.close = function (fd, callback) {
   fd.onwriteend = makeCallback(callback)
 }
