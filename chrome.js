@@ -521,7 +521,8 @@ exports.writeFile = function (path, data, options, cb) {
   assertEncoding(options.encoding)
 
   var flag = options.flag || 'w' // eslint-disable-line
-
+  console.log(flag)
+  console.log('FLAG')
   window.requestFileSystem(
     window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
     function (cfs) {
