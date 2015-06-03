@@ -6539,34 +6539,36 @@ fs.appendFile(filename, s, function (e) {
     common.error('file read')
     ncallbacks++
     assert.equal(Buffer.byteLength(s), buffer.length)
-    fs.unlink(filename, function (err) {
-      if (err) {
-        assert.fail(err)
-      }
-      assert.equal(2, ncallbacks, 'test-fs-append-file-1')
-      console.log('test-fs-append-file-1 success')
-    })
+    assert.equal(2, ncallbacks, 'test-fs-append-file-1')
+    console.log('test-fs-append-file-1 success')
   })
 })
-/*
+
 // test that appends data to a non empty file
-var filename2 = join(common.tmpDir, 'append2.txt')
 fs.writeFile(filename, currentFileData, function (e) {
   fs.appendFile(filename, s, function (e) {
+    console.log(e)
     if (e) throw e
 
-    ncallbacks++
+    var ncallbacks2 = 1
     common.error('appended to file2')
 
     fs.readFile(filename, function (e, buffer) {
       if (e) throw e
       common.error('file2 read')
-      ncallbacks++
+      ncallbacks2++
       assert.equal(Buffer.byteLength(s) + currentFileData.length, buffer.length)
+      fs.unlink(filename, function (err) {
+        if (err) {
+          assert.fail(err)
+        }
+        assert.equal(2, ncallbacks2, 'test-fs-append-file-1')
+        console.log('test-fs-append-file-1 success')
+      })
     })
   })
 })
-
+/*
 // test that appendFile accepts buffers
 var filename3 = join(common.tmpDir, 'append3.txt')
 fs.writeFileSync(filename3, currentFileData)
