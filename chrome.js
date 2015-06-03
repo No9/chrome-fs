@@ -72,12 +72,6 @@ function resolve (path) {
   if (retString[retString.length - 1] === '/') {
     retString = retString.slice(0, retString.length - 1)
   }
-
-  if (retString === '.') {
-    retString = ''
-  }
-
-  retString = retString.replace('../', '')
   return retString
 }
 
@@ -282,9 +276,44 @@ exports.stat = function (path, callback) {
                               atime: null,
                               mtime: file.lastModifiedDate,
                               ctime: null }
+              statval.isDirectory = function () { return false }
+              statval.isFile = function () { return true }
+              statval.isSocket = function () { return false }
+              statval.isBlockDevice = function () { return false }
+              statval.isCharacterDevice = function () { return false }
+              statval.isFIFO = function () { return false }
+              statval.isSymbolicLink = function () { return false }
               callback(null, statval)
             })
-          }, callback)
+          }, function (err) {
+            if (err.name === 'TypeMismatchError') {
+              cfs.root.getDirectory(path, opts, function (dirEntry) {
+               var statval = { dev: 0,
+                                mode: 33206,
+                                nlink: 0,
+                                uid: 0,
+                                gid: 0,
+                                rdev: 0,
+                                ino: 0,
+                                size: 0,
+                                atime: null,
+                                mtime: new Date(0),
+                                ctime: null,
+                                blksize: -1,
+                                blocks: -1 }
+               statval.isDirectory = function () { return true }
+               statval.isFile = function () { return false }
+               statval.isSocket = function () { return false }
+               statval.isBlockDevice = function () { return false }
+               statval.isCharacterDevice = function () { return false }
+               statval.isFIFO = function () { return false }
+               statval.isSymbolicLink = function () { return false }
+               callback(null, statval)
+             })
+            } else {
+              callback(err)
+            }
+          })
         }, callback)
 }
 
@@ -336,7 +365,16 @@ exports.open = function (path, flags, mode, callback) {
                       callback(null, file)
                     })
                   }
-                }, callback)
+                }, function (err) {
+                  // Work around for directory file descriptor
+                  if (err.name === 'TypeMismatchError') {
+                    var dird = {}
+                    dird.filePath = path
+                    callback(null, dird)
+                  } else {
+                    callback(err)
+                  }
+                })
         }, callback)
 }
 

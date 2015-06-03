@@ -1,11 +1,11 @@
-var fs = require('../../chrome')
-var assert = require('assert')
-var test = require('tape')
+var fs = require('../../chrome') // eslint-disable-line
+// var assert = require('assert')
+// var test = require('tape')
 var test_fs_stat = require('../simple/test-fs-stat') // eslint-disable-line
+// var rpt = document.getElementById('outputlist')
 
-var rpt = document.getElementById('outputlist')
-
-test('api test', function (t) {
+// test('api test', function (t) {
+/*
   t.plan(1)
   var rnpath = '/file' + Date.now() + '-old.txt'
   var rnstr = 'some content\n'
@@ -97,11 +97,12 @@ test('api test', function (t) {
     })
   })
   */
-})
-
+// })
+/*
 test.createStream().on('data', function (row) {
   var itm = document.createElement('li')
   var textnode = document.createTextNode(row)
   itm.appendChild(textnode)
   rpt.appendChild(itm)
 })
+*/
