@@ -6232,6 +6232,31 @@ Class: fs.FSWatcher
 
 }).call(this,require('_process'))
 },{"_process":10,"buffer":3,"stream":22,"util":25}],27:[function(require,module,exports){
+var fs = require('../../chrome')
+var assert = require('assert')
+var exists
+var doesNotExist
+var f = '/test-fs-exists.txt'
+fs.writeFile(f, 'Some lorum impsum', function () {
+  assert.ok(true, 'Write with string and callback')
+  fs.exists(f + '-NO', function (y) {
+    doesNotExist = y
+    fs.exists(f, function (y) {
+      exists = y
+      fs.unlink(f, function (err) {
+        if (err) {
+          assert.fail(err)
+        }
+        assert.strictEqual(exists, true)
+        assert.strictEqual(doesNotExist, false)
+        assert.ok(true, 'delete and callback')
+        console.log('test-fs-exists success')
+      })
+    })
+  })
+})
+
+},{"../../chrome":26,"assert":1}],28:[function(require,module,exports){
 (function (global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -6357,11 +6382,9 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
 })
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../chrome":26,"assert":1}],28:[function(require,module,exports){
-var fs = require('../../chrome') // eslint-disable-line
-// var assert = require('assert')
-// var test = require('tape')
+},{"../../chrome":26,"assert":1}],29:[function(require,module,exports){
 var test_fs_stat = require('../simple/test-fs-stat') // eslint-disable-line
+var test_fs_stat = require('../simple/test-fs-exists') // eslint-disable-line
 // var rpt = document.getElementById('outputlist')
 
 // test('api test', function (t) {
@@ -6467,4 +6490,4 @@ test.createStream().on('data', function (row) {
 })
 */
 
-},{"../../chrome":26,"../simple/test-fs-stat":27}]},{},[28]);
+},{"../simple/test-fs-exists":27,"../simple/test-fs-stat":28}]},{},[29]);

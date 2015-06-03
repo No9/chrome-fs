@@ -1,7 +1,5 @@
-var fs = require('../../chrome') // eslint-disable-line
-// var assert = require('assert')
-// var test = require('tape')
 var test_fs_stat = require('../simple/test-fs-stat') // eslint-disable-line
+var test_fs_stat = require('../simple/test-fs-exists') // eslint-disable-line
 // var rpt = document.getElementById('outputlist')
 
 // test('api test', function (t) {
