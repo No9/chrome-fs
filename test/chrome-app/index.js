@@ -1,5 +1,7 @@
 var test_fs_stat = require('../simple/test-fs-stat') // eslint-disable-line
 var test_fs_stat = require('../simple/test-fs-exists') // eslint-disable-line
+var test_fs_write_file = require('../simple/test-fs-write-file') // eslint-disable-line
+
 // var rpt = document.getElementById('outputlist')
 
 // test('api test', function (t) {

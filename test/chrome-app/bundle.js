@@ -359,7 +359,7 @@ var objectKeys = Object.keys || function (obj) {
   return keys;
 };
 
-},{"util/":25}],2:[function(require,module,exports){
+},{"util/":26}],2:[function(require,module,exports){
 
 },{}],3:[function(require,module,exports){
 /*!
@@ -2358,6 +2358,234 @@ module.exports = Array.isArray || function (arr) {
 };
 
 },{}],10:[function(require,module,exports){
+(function (process){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// resolves . and .. elements in a path array with directory names there
+// must be no slashes, empty elements, or device names (c:\) in the array
+// (so also no leading and trailing slashes - it does not distinguish
+// relative and absolute paths)
+function normalizeArray(parts, allowAboveRoot) {
+  // if the path tries to go above the root, `up` ends up > 0
+  var up = 0;
+  for (var i = parts.length - 1; i >= 0; i--) {
+    var last = parts[i];
+    if (last === '.') {
+      parts.splice(i, 1);
+    } else if (last === '..') {
+      parts.splice(i, 1);
+      up++;
+    } else if (up) {
+      parts.splice(i, 1);
+      up--;
+    }
+  }
+
+  // if the path is allowed to go above the root, restore leading ..s
+  if (allowAboveRoot) {
+    for (; up--; up) {
+      parts.unshift('..');
+    }
+  }
+
+  return parts;
+}
+
+// Split a filename into [root, dir, basename, ext], unix version
+// 'root' is just a slash, or nothing.
+var splitPathRe =
+    /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/;
+var splitPath = function(filename) {
+  return splitPathRe.exec(filename).slice(1);
+};
+
+// path.resolve([from ...], to)
+// posix version
+exports.resolve = function() {
+  var resolvedPath = '',
+      resolvedAbsolute = false;
+
+  for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
+    var path = (i >= 0) ? arguments[i] : process.cwd();
+
+    // Skip empty and invalid entries
+    if (typeof path !== 'string') {
+      throw new TypeError('Arguments to path.resolve must be strings');
+    } else if (!path) {
+      continue;
+    }
+
+    resolvedPath = path + '/' + resolvedPath;
+    resolvedAbsolute = path.charAt(0) === '/';
+  }
+
+  // At this point the path should be resolved to a full absolute path, but
+  // handle relative paths to be safe (might happen when process.cwd() fails)
+
+  // Normalize the path
+  resolvedPath = normalizeArray(filter(resolvedPath.split('/'), function(p) {
+    return !!p;
+  }), !resolvedAbsolute).join('/');
+
+  return ((resolvedAbsolute ? '/' : '') + resolvedPath) || '.';
+};
+
+// path.normalize(path)
+// posix version
+exports.normalize = function(path) {
+  var isAbsolute = exports.isAbsolute(path),
+      trailingSlash = substr(path, -1) === '/';
+
+  // Normalize the path
+  path = normalizeArray(filter(path.split('/'), function(p) {
+    return !!p;
+  }), !isAbsolute).join('/');
+
+  if (!path && !isAbsolute) {
+    path = '.';
+  }
+  if (path && trailingSlash) {
+    path += '/';
+  }
+
+  return (isAbsolute ? '/' : '') + path;
+};
+
+// posix version
+exports.isAbsolute = function(path) {
+  return path.charAt(0) === '/';
+};
+
+// posix version
+exports.join = function() {
+  var paths = Array.prototype.slice.call(arguments, 0);
+  return exports.normalize(filter(paths, function(p, index) {
+    if (typeof p !== 'string') {
+      throw new TypeError('Arguments to path.join must be strings');
+    }
+    return p;
+  }).join('/'));
+};
+
+
+// path.relative(from, to)
+// posix version
+exports.relative = function(from, to) {
+  from = exports.resolve(from).substr(1);
+  to = exports.resolve(to).substr(1);
+
+  function trim(arr) {
+    var start = 0;
+    for (; start < arr.length; start++) {
+      if (arr[start] !== '') break;
+    }
+
+    var end = arr.length - 1;
+    for (; end >= 0; end--) {
+      if (arr[end] !== '') break;
+    }
+
+    if (start > end) return [];
+    return arr.slice(start, end - start + 1);
+  }
+
+  var fromParts = trim(from.split('/'));
+  var toParts = trim(to.split('/'));
+
+  var length = Math.min(fromParts.length, toParts.length);
+  var samePartsLength = length;
+  for (var i = 0; i < length; i++) {
+    if (fromParts[i] !== toParts[i]) {
+      samePartsLength = i;
+      break;
+    }
+  }
+
+  var outputParts = [];
+  for (var i = samePartsLength; i < fromParts.length; i++) {
+    outputParts.push('..');
+  }
+
+  outputParts = outputParts.concat(toParts.slice(samePartsLength));
+
+  return outputParts.join('/');
+};
+
+exports.sep = '/';
+exports.delimiter = ':';
+
+exports.dirname = function(path) {
+  var result = splitPath(path),
+      root = result[0],
+      dir = result[1];
+
+  if (!root && !dir) {
+    // No dirname whatsoever
+    return '.';
+  }
+
+  if (dir) {
+    // It has a dirname, strip trailing slash
+    dir = dir.substr(0, dir.length - 1);
+  }
+
+  return root + dir;
+};
+
+
+exports.basename = function(path, ext) {
+  var f = splitPath(path)[2];
+  // TODO: make this comparison case-insensitive on windows?
+  if (ext && f.substr(-1 * ext.length) === ext) {
+    f = f.substr(0, f.length - ext.length);
+  }
+  return f;
+};
+
+
+exports.extname = function(path) {
+  return splitPath(path)[3];
+};
+
+function filter (xs, f) {
+    if (xs.filter) return xs.filter(f);
+    var res = [];
+    for (var i = 0; i < xs.length; i++) {
+        if (f(xs[i], i, xs)) res.push(xs[i]);
+    }
+    return res;
+}
+
+// String.prototype.substr - negative index don't work in IE8
+var substr = 'ab'.substr(-1) === 'b'
+    ? function (str, start, len) { return str.substr(start, len) }
+    : function (str, start, len) {
+        if (start < 0) start = str.length + start;
+        return str.substr(start, len);
+    }
+;
+
+}).call(this,require('_process'))
+},{"_process":11}],11:[function(require,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -2449,10 +2677,10 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],11:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 module.exports = require("./lib/_stream_duplex.js")
 
-},{"./lib/_stream_duplex.js":12}],12:[function(require,module,exports){
+},{"./lib/_stream_duplex.js":13}],13:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -2545,7 +2773,7 @@ function forEach (xs, f) {
 }
 
 }).call(this,require('_process'))
-},{"./_stream_readable":14,"./_stream_writable":16,"_process":10,"core-util-is":17,"inherits":8}],13:[function(require,module,exports){
+},{"./_stream_readable":15,"./_stream_writable":17,"_process":11,"core-util-is":18,"inherits":8}],14:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -2593,7 +2821,7 @@ PassThrough.prototype._transform = function(chunk, encoding, cb) {
   cb(null, chunk);
 };
 
-},{"./_stream_transform":15,"core-util-is":17,"inherits":8}],14:[function(require,module,exports){
+},{"./_stream_transform":16,"core-util-is":18,"inherits":8}],15:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -3548,7 +3776,7 @@ function indexOf (xs, x) {
 }
 
 }).call(this,require('_process'))
-},{"./_stream_duplex":12,"_process":10,"buffer":3,"core-util-is":17,"events":7,"inherits":8,"isarray":9,"stream":22,"string_decoder/":23,"util":2}],15:[function(require,module,exports){
+},{"./_stream_duplex":13,"_process":11,"buffer":3,"core-util-is":18,"events":7,"inherits":8,"isarray":9,"stream":23,"string_decoder/":24,"util":2}],16:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -3759,7 +3987,7 @@ function done(stream, er) {
   return stream.push(null);
 }
 
-},{"./_stream_duplex":12,"core-util-is":17,"inherits":8}],16:[function(require,module,exports){
+},{"./_stream_duplex":13,"core-util-is":18,"inherits":8}],17:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -4240,7 +4468,7 @@ function endWritable(stream, state, cb) {
 }
 
 }).call(this,require('_process'))
-},{"./_stream_duplex":12,"_process":10,"buffer":3,"core-util-is":17,"inherits":8,"stream":22}],17:[function(require,module,exports){
+},{"./_stream_duplex":13,"_process":11,"buffer":3,"core-util-is":18,"inherits":8,"stream":23}],18:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -4350,10 +4578,10 @@ function objectToString(o) {
   return Object.prototype.toString.call(o);
 }
 }).call(this,require("buffer").Buffer)
-},{"buffer":3}],18:[function(require,module,exports){
+},{"buffer":3}],19:[function(require,module,exports){
 module.exports = require("./lib/_stream_passthrough.js")
 
-},{"./lib/_stream_passthrough.js":13}],19:[function(require,module,exports){
+},{"./lib/_stream_passthrough.js":14}],20:[function(require,module,exports){
 exports = module.exports = require('./lib/_stream_readable.js');
 exports.Stream = require('stream');
 exports.Readable = exports;
@@ -4362,13 +4590,13 @@ exports.Duplex = require('./lib/_stream_duplex.js');
 exports.Transform = require('./lib/_stream_transform.js');
 exports.PassThrough = require('./lib/_stream_passthrough.js');
 
-},{"./lib/_stream_duplex.js":12,"./lib/_stream_passthrough.js":13,"./lib/_stream_readable.js":14,"./lib/_stream_transform.js":15,"./lib/_stream_writable.js":16,"stream":22}],20:[function(require,module,exports){
+},{"./lib/_stream_duplex.js":13,"./lib/_stream_passthrough.js":14,"./lib/_stream_readable.js":15,"./lib/_stream_transform.js":16,"./lib/_stream_writable.js":17,"stream":23}],21:[function(require,module,exports){
 module.exports = require("./lib/_stream_transform.js")
 
-},{"./lib/_stream_transform.js":15}],21:[function(require,module,exports){
+},{"./lib/_stream_transform.js":16}],22:[function(require,module,exports){
 module.exports = require("./lib/_stream_writable.js")
 
-},{"./lib/_stream_writable.js":16}],22:[function(require,module,exports){
+},{"./lib/_stream_writable.js":17}],23:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -4497,7 +4725,7 @@ Stream.prototype.pipe = function(dest, options) {
   return dest;
 };
 
-},{"events":7,"inherits":8,"readable-stream/duplex.js":11,"readable-stream/passthrough.js":18,"readable-stream/readable.js":19,"readable-stream/transform.js":20,"readable-stream/writable.js":21}],23:[function(require,module,exports){
+},{"events":7,"inherits":8,"readable-stream/duplex.js":12,"readable-stream/passthrough.js":19,"readable-stream/readable.js":20,"readable-stream/transform.js":21,"readable-stream/writable.js":22}],24:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -4720,14 +4948,14 @@ function base64DetectIncompleteChar(buffer) {
   this.charLength = this.charReceived ? 3 : 0;
 }
 
-},{"buffer":3}],24:[function(require,module,exports){
+},{"buffer":3}],25:[function(require,module,exports){
 module.exports = function isBuffer(arg) {
   return arg && typeof arg === 'object'
     && typeof arg.copy === 'function'
     && typeof arg.fill === 'function'
     && typeof arg.readUInt8 === 'function';
 }
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -5317,7 +5545,7 @@ function hasOwnProperty(obj, prop) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":24,"_process":10,"inherits":8}],26:[function(require,module,exports){
+},{"./support/isBuffer":25,"_process":11,"inherits":8}],27:[function(require,module,exports){
 (function (process){
 var util = require('util')
 var Buffer = require('buffer').Buffer
@@ -5727,6 +5955,8 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
   fileReader.onerror = function (evt) {
     callback(evt, null)
   }
+  // no-op the onprogressevent
+  fileReader.onprogress = function () {}
 
   if (fd.type === 'text/plain') {
     fileReader.readAsText(data)
@@ -5857,15 +6087,25 @@ exports.writeFile = function (path, data, options, cb) {
               if (flag === 'w') {
                 fileEntry.createWriter(function (fileWriter) {
                   fileWriter.onerror = callback
-                  fileWriter.onwriteend = callback
+                  if (typeof callback === 'function') {
+                    fileWriter.onwriteend = function (evt) {
+                      callback(null, evt)
+                    }
+                  } else {
+                    fileWriter.onwriteend = function () {}
+                  }
+                  fileWriter.onprogress = function () {}
                   var blob = new Blob([data], {type: 'text/plain'}) // eslint-disable-line
                   fileWriter.write(blob)
-                  callback()
-                }, callback)
+                }, function (evt) {
+                     if (evt.type !== 'writeend') {
+                       callback(evt)
+                     }
+                   })
               } else {
                 callback('incorrect flag')
               }
-            }, callback)
+            }, function () {})
     }, callback)
 }
 
@@ -6231,7 +6471,13 @@ Class: fs.FSWatcher
 */
 
 }).call(this,require('_process'))
-},{"_process":10,"buffer":3,"stream":22,"util":25}],27:[function(require,module,exports){
+},{"_process":11,"buffer":3,"stream":23,"util":26}],28:[function(require,module,exports){
+exports.tmpDir = '/'
+exports.error = function (msg) {
+  console.log(msg)
+}
+
+},{}],29:[function(require,module,exports){
 var fs = require('../../chrome')
 var assert = require('assert')
 var exists
@@ -6256,7 +6502,7 @@ fs.writeFile(f, 'Some lorum impsum', function () {
   })
 })
 
-},{"../../chrome":26,"assert":1}],28:[function(require,module,exports){
+},{"../../chrome":27,"assert":1}],30:[function(require,module,exports){
 (function (global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -6373,7 +6619,7 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
       if (err) {
         assert.fail(err)
       }
-      assert.equal(4, success_count)
+      assert.equal(3, success_count)
       assert.equal(false, got_error)
       assert.ok(true, 'delete and callback')
       console.log('test-fs-stat success')
@@ -6382,9 +6628,148 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
 })
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../chrome":26,"assert":1}],29:[function(require,module,exports){
+},{"../../chrome":27,"assert":1}],31:[function(require,module,exports){
+(function (Buffer){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+var fs = require('../../chrome')
+var join = require('path').join
+
+var filename = join(common.tmpDir, 'test.txt')
+
+common.error('writing to ' + filename)
+
+var n = 220
+var s = 'asdpfkasdlfjsd;kljfklsdjfklasjdfklasdjfasdkljf' +
+        'asdpfkasdlfjsd;kljfklsdjfklasjdfklasdjfasdkljf' +
+        'sdfgs34234234asdfasdfasdfasdfasdfasfasdfsdfasdf' +
+        'asdpfkasdlfjsd;kljfklsdjfklasjdfklasdjfasdkljf' +
+        'asdpfkasdlfjsd;kljfklsdjfklasjdfklasdjfasdkljf' +
+        'sdfgs34234234asdfasdfasdfasdfasdfasfasdfsdfasdf' +
+        'end123end123\n'
+
+fs.writeFile(filename, s, function (e) {
+  if (e) {
+    console.log(e)
+    throw e
+  }
+  var ncallbacks1 = 1
+  common.error('file written')
+
+  fs.readFile(filename, function (e, buffer) {
+    if (e) throw e
+    common.error('file read')
+    ncallbacks1++
+    assert.equal(Buffer.byteLength(s), buffer.length)
+    fs.unlink(filename, function (err) {
+      if (err) {
+        assert.fail(err)
+      }
+      assert.equal(2, ncallbacks1, 'test-fs-write-file-1')
+      console.log('test-fs-write-file-1 success')
+    })
+  })
+})
+
+// test that writeFile accepts buffers
+var filename2 = join(common.tmpDir, 'test2.txt')
+var buf = new Buffer(s, 'utf8')
+common.error('writing to ' + filename2)
+
+fs.writeFile(filename2, buf, function (e) {
+  if (e) {
+    console.log(e)
+    throw e
+  }
+
+  var ncallbacks2 = 1
+  common.error('file2 written')
+
+  fs.readFile(filename2, function (e, buffer) {
+    if (e) {
+      console.log(e)
+      console.log('file2 READERROR')
+      throw e
+    }
+    common.error('file2 read')
+    ncallbacks2++
+    assert.equal(buf.length, buffer.length)
+    fs.unlink(filename2, function (err) {
+      if (err) {
+        assert.fail(err)
+      }
+      assert.equal(2, ncallbacks2, 'test-fs-write-file-2')
+      console.log('test-fs-write-file-2 success')
+    })
+  })
+})
+
+// test that writeFile accepts numbers.
+var filename3 = join(common.tmpDir, 'test3.txt')
+common.error('writing to ' + filename3)
+
+var m = '0600'
+fs.writeFile(filename3, n, { mode: m }, function (e) {
+  if (e) {
+    console.log(e)
+    throw e
+  }
+
+  // windows permissions aren't unix
+  /*if (process.platform !== 'win32') {
+    var st = fs.statSync(filename3)
+    assert.equal(st.mode & 0700, m)
+  }*/
+
+  var ncallbacks3 = 1
+  common.error('file3 written')
+
+  fs.readFile(filename3, function (e, buffer) {
+    if (e) {
+      console.log(e)
+      console.log('file3 READERROR')
+      throw e
+    }
+    common.error('file3 read')
+    ncallbacks3++
+    assert.equal(Buffer.byteLength('' + n), buffer.length)
+    fs.unlink(filename3, function (err) {
+      if (err) {
+        assert.fail(err)
+      }
+      assert.equal(2, ncallbacks3, 'test-fs-write-file-3')
+      console.log('test-fs-write-file-3 success')
+    })
+  })
+})
+
+}).call(this,require("buffer").Buffer)
+},{"../../chrome":27,"../common":28,"assert":1,"buffer":3,"path":10}],32:[function(require,module,exports){
 var test_fs_stat = require('../simple/test-fs-stat') // eslint-disable-line
 var test_fs_stat = require('../simple/test-fs-exists') // eslint-disable-line
+var test_fs_write_file = require('../simple/test-fs-write-file') // eslint-disable-line
+
 // var rpt = document.getElementById('outputlist')
 
 // test('api test', function (t) {
@@ -6490,4 +6875,4 @@ test.createStream().on('data', function (row) {
 })
 */
 
-},{"../simple/test-fs-exists":27,"../simple/test-fs-stat":28}]},{},[29]);
+},{"../simple/test-fs-exists":29,"../simple/test-fs-stat":30,"../simple/test-fs-write-file":31}]},{},[32]);

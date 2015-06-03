@@ -113,7 +113,7 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
       if (err) {
         assert.fail(err)
       }
-      assert.equal(4, success_count)
+      assert.equal(3, success_count)
       assert.equal(false, got_error)
       assert.ok(true, 'delete and callback')
       console.log('test-fs-stat success')

@@ -406,6 +406,8 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
   fileReader.onerror = function (evt) {
     callback(evt, null)
   }
+  // no-op the onprogressevent
+  fileReader.onprogress = function () {}
 
   if (fd.type === 'text/plain') {
     fileReader.readAsText(data)
@@ -536,15 +538,25 @@ exports.writeFile = function (path, data, options, cb) {
               if (flag === 'w') {
                 fileEntry.createWriter(function (fileWriter) {
                   fileWriter.onerror = callback
-                  fileWriter.onwriteend = callback
+                  if (typeof callback === 'function') {
+                    fileWriter.onwriteend = function (evt) {
+                      callback(null, evt)
+                    }
+                  } else {
+                    fileWriter.onwriteend = function () {}
+                  }
+                  fileWriter.onprogress = function () {}
                   var blob = new Blob([data], {type: 'text/plain'}) // eslint-disable-line
                   fileWriter.write(blob)
-                  callback()
-                }, callback)
+                }, function (evt) {
+                     if (evt.type !== 'writeend') {
+                       callback(evt)
+                     }
+                   })
               } else {
                 callback('incorrect flag')
               }
-            }, callback)
+            }, function () {})
     }, callback)
 }
 

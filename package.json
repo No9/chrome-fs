@@ -5,7 +5,7 @@
   "main": "main.js",
   "browser": "chrome.js",
   "scripts": {
-    "test": "standard && browserify test/chrome-app/index.js -o test/chrome-app/bundle.js && tape test/*.js"
+    "test": "standard && browserify test/chrome-app/index.js -o test/chrome-app/bundle.js && tape test/runner.js"
   },
   "repository": {
     "type": "git",
