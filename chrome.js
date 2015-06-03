@@ -347,7 +347,7 @@ exports.open = function (path, flags, mode, callback) {
         function (cfs) {
           var opts = {}
           if (flags === 'w') {
-            opts = {create: true, exclusive: true}
+            opts = {create: true}
           }
           cfs.root.getFile(
                 path,
@@ -441,7 +441,7 @@ exports.readFile = function (path, options, cb) {
                   fileEntry.onerror = callback
                   var fileReader = new FileReader() // eslint-disable-line
                   fileReader.onload = function (evt) {
-                    callback(null, this.result)
+                    window.setTimeout(callback, 0, null, this.result)
                   }
                   fileReader.onerror = function (evt) {
                     callback(evt, null)
@@ -500,7 +500,7 @@ exports.unlink = function (fd, callback) {
         function (cfs) {
           cfs.root.getFile(
                 path,
-                {exclusive: true},
+                {},
                 function (fileEntry) {
                   fileEntry.remove(callback)
                 })
@@ -526,7 +526,7 @@ exports.writeFile = function (path, data, options, cb) {
     function (cfs) {
       var opts = {}
       if (flag === 'w') {
-        opts = {create: true, exclusive: true}
+        opts = {create: true}
       }
       cfs.root.getFile(
             path,
@@ -539,7 +539,7 @@ exports.writeFile = function (path, data, options, cb) {
                   fileWriter.onerror = callback
                   if (typeof callback === 'function') {
                     fileWriter.onwriteend = function (evt) {
-                      callback(null, evt)
+                      window.setTimeout(callback, 0, null, evt)
                     }
                   } else {
                     fileWriter.onwriteend = function () {}
@@ -577,7 +577,7 @@ exports.appendFile = function (path, data, options, cb) {
     function (cfs) {
       var opts = {}
       if (flag === 'a') {
-        opts = {create: true, exclusive: true}
+        opts = {create: true}
       }
       cfs.root.getFile(
             path,
@@ -590,7 +590,7 @@ exports.appendFile = function (path, data, options, cb) {
                   fileWriter.onerror = callback
                   if (typeof callback === 'function') {
                     fileWriter.onwriteend = function (evt) {
-                      callback(null, evt)
+                      window.setTimeout(callback, 0, null, evt)
                     }
                   } else {
                     fileWriter.onwriteend = function () {}
@@ -599,7 +599,6 @@ exports.appendFile = function (path, data, options, cb) {
                   fileWriter.seek(fileWriter.length)
                   var blob = new Blob([data], {type: 'text/plain'}) // eslint-disable-line
                   fileWriter.write(blob)
-                  callback()
                 }, callback)
               } else {
                 callback('incorrect flag')
