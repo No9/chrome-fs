@@ -5897,7 +5897,7 @@ exports.writeFile = function (path, data, options, cb) {
                   fileWriter.onerror = callback
                   if (typeof callback === 'function') {
                     fileWriter.onwriteend = function (evt) {
-                      callback(null, evt)
+                      window.setTimeout(callback, 0, null, evt)
                     }
                   } else {
                     fileWriter.onwriteend = function () {}
@@ -6041,6 +6041,7 @@ ReadStream.prototype.open = function () {
     self.fd = fd
     self.emit('open', fd)
     // start the flow of data.
+    debugger // eslint-disable-line
     self.read()
   })
 }
@@ -6288,120 +6289,18 @@ Class: fs.FSWatcher
 }).call(this,require('_process'))
 },{"_process":10,"buffer":2,"stream":22,"util":25}],27:[function(require,module,exports){
 var test_fs_stat = require('../simple/test-fs-stat') // eslint-disable-line
-var test_fs_stat = require('../simple/test-fs-exists') // eslint-disable-line
+var test_fs_exists = require('../simple/test-fs-exists') // eslint-disable-line
 var test_fs_write_file = require('../simple/test-fs-write-file') // eslint-disable-line
 var test_fs_append_file = require('../simple/test-fs-append-file') // eslint-disable-line
-
-// var rpt = document.getElementById('outputlist')
-
-// test('api test', function (t) {
-/*
-  t.plan(1)
-  var rnpath = '/file' + Date.now() + '-old.txt'
-  var rnstr = 'some content\n'
-  fs.open(rnpath, 'w', function (err, fd) {
-    if (err) {
-      throw 'error opening file: ' + err.message
-    }
-    fs.write(fd, rnstr, 0, function (err) {
-      if (err) throw 'error writing file: ' + err
-
-      t.ok()
-      fs.close(fd, function () {
-        var npath = 'file' + Date.now() + '-new.txt'
-        fs.rename(rnpath, npath, function (err) {
-          if (err) {
-            console.log(err)
-          }
-          console.log(npath + ' trying to open')
-          fs.open(npath, 'r', function (err, fd) {
-            if (err) {
-              throw 'error opening file: ' + err
-            }
-            var buffer = new Buffer(8192)
-            console.log('Reading Buffer')
-            fs.read(fd, buffer, 0, 8192, -1, function (err, len, data) {
-              if (err) throw 'error writing file: ' + err
-              console.log('read callback called ' + data)
-              fs.stat(npath, function (err, data) {
-                if (err) {
-                  throw 'error opening file: ' + err
-                }
-                console.log(data)
-              })
-            })
-
-          })
-        })
-      })
-    })
-  })
-
-  var dirname = Date.now()
-
-  fs.mkdir(dirname, function () {
-    console.log('mkdir success')
-    fs.rmdir(dirname, function () {
-      console.log('rmdir success')
-    })
-  })
-
-  fs.readdir('/', function (err, entities) {
-    if (err) {
-      throw 'error opening dir' + err
-    }
-    console.log(entities)
-  })
-
-  var path = '/file' + Date.now() + '.txt'
-  var str = 'some content\n'
-
-  fs.open(path, 'w', function (err, fd) {
-    if (err) {
-      throw 'error opening file: ' + err.message
-    }
-    fs.write(fd, str, 0, function (err) {
-      if (err) throw 'error writing file: ' + err
-
-      t.ok()
-      fs.close(fd, function () {
-        fs.unlink(path, function (err) {
-          if (err) {
-            assert.fail(err)
-          }
-          assert.ok(true, 'delete and callback')
-        })
-      })
-    })
-  })
-
-/*
-  var filelocation = '/test.txt'
-  fs.writeFile(filelocation, 'Some lorum impsum', function () {
-    assert.ok(true, 'Write with string and callback')
-    fs.unlink(filelocation, function (err) {
-      if (err) {
-        assert.fail(err)
-      }
-      assert.ok(true, 'delete and callback')
-    })
-  })
-  */
-// })
-/*
-test.createStream().on('data', function (row) {
-  var itm = document.createElement('li')
-  var textnode = document.createTextNode(row)
-  itm.appendChild(textnode)
-  rpt.appendChild(itm)
-})
-*/
+// var test_fs_empty_readStream = require('../simple/test-fs-empty-readStream') // eslint-disable-line
+// var read_stream_fd_test = require('../simple/test-fs-read-stream-fd') // eslint-disable-line
 
 },{"../simple/test-fs-append-file":29,"../simple/test-fs-exists":30,"../simple/test-fs-stat":31,"../simple/test-fs-write-file":32}],28:[function(require,module,exports){
 exports.tmpDir = '/'
 exports.error = function (msg) {
   console.log(msg)
 }
+exports.fixturesDir = '/'
 
 },{}],29:[function(require,module,exports){
 (function (Buffer){
@@ -6516,45 +6415,6 @@ fs.writeFile(filename3, currentFileData, function (e) {
     })
   })
 })
-/*
-// test that appendFile accepts numbers.
-var filename4 = join(common.tmpDir, 'append4.txt')
-fs.writeFileSync(filename4, currentFileData)
-
-common.error('appending to ' + filename4)
-
-var m = '0600'
-fs.appendFile(filename4, n, { mode: m }, function (e) {
-  if (e) throw e
-
-  ncallbacks++
-  common.error('appended to file4')
-
-  // windows permissions aren't unix
-  // if (process.platform !== 'win32') {
-  //  var st = fs.statSync(filename4)
-  //  assert.equal(st.mode & 0700, m)
-  // }
-
-  fs.readFile(filename4, function (e, buffer) {
-    if (e) throw e
-    common.error('file4 read')
-    ncallbacks++
-    assert.equal(Buffer.byteLength('' + n) + currentFileData.length,
-                 buffer.length)
-  })
-})
-
-process.on('exit', function () {
-  common.error('done')
-  assert.equal(8, ncallbacks)
-
-  fs.unlinkSync(filename)
-  fs.unlinkSync(filename2)
-  fs.unlinkSync(filename3)
-  fs.unlinkSync(filename4)
-})
-*/
 
 }).call(this,require("buffer").Buffer)
 },{"../../chrome":26,"../common":28,"assert":1,"buffer":2,"path":9}],30:[function(require,module,exports){

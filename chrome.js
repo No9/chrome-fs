@@ -683,6 +683,7 @@ ReadStream.prototype.open = function () {
     self.fd = fd
     self.emit('open', fd)
     // start the flow of data.
+    debugger // eslint-disable-line
     self.read()
   })
 }

@@ -10,35 +10,6 @@ $ npm install chrome-fs --save
 $ browserify -r chrome-fs:fs index.js -o bundle.js
 ```
 
-## Test 
-
-```
-$ npm test
-```
-
-This will load the folder `test/chrome-app` as an unpacked extension in chrome.
-Test currently designed for windows and Mac Canary support for others accepted
-
-## Permissions 
-
-The following permissions need to be added to your chrome packaged app for this module.
-
-```
-  "permissions": [
-  	"filesystem"
-  ]
-```
-## Caveats 
-
-Chrome Packaged Apps don't have the notion of current working directory ```CWD```.
-So relative paths are not escapted they are trimmed to be relative from root 
-i.e. 
-`../../direct1/file1` Will resolve to `/direct1/file1`
-
-`.` Will resolve to `/`
-
-If there is a more involved implementation required then please raise an issue. 
-
 ## API Status 
 
 This list is based on the node.js documentation https://nodejs.org/api/fs.html 
@@ -81,13 +52,13 @@ Sync apis won't be supported they are listed here https://github.com/No9/chrome-
 - [ ] fs.access(path[, mode], callback)
 Class: - [ ] fs.Stats
 Stat Time Values
-- [x] fs.createReadStream(path[, options])
+- [ ] fs.createReadStream(path[, options])
     - Class: 
-- [x] fs.ReadStream
+- [ ] fs.ReadStream
     - Event: 'open'
-- [x] fs.createWriteStream(path[, options])
+- [ ] fs.createWriteStream(path[, options])
 Class: 
-- [x] fs.WriteStream
+- [ ] fs.WriteStream
     - Event: 'open'
     - file.bytesWritten
 Class: 
@@ -95,6 +66,46 @@ Class:
     - watcher.close()
     - Event: 'change'
     - Event: 'error'
+
+## Test 
+
+```
+$ npm test
+```
+
+This will load the folder `test/chrome-app` as an unpacked extension in chrome.
+Test currently designed for Chrome on Windows and Linux Canary on Mac other variants accepted
+
+## Permissions 
+
+It is recommended that the following permissions are added to your chrome packaged app for this module.
+
+```
+  "permissions": [
+    "unlimitedStorage"
+  ]
+```
+
+## Caveats 
+
+### Relative Directories
+
+Chrome Packaged Apps don't have the notion of current working directory ```CWD```.
+So relative paths are not escapted they are trimmed to be relative from root 
+i.e. 
+`../../direct1/file1` Will resolve to `/direct1/file1`
+
+`.` Will resolve to `/`
+
+### Ownership Mod Mapping
+
+Chrome Packaged Apps allow you to see and edit the filesystem from the dev tools so the `chown, fchown, chmod, fmod` calls are there for compatibility only.
+Any chown call *will not* be reflected in `stat` 
+
+### Stat 
+
+Best effort has been made to support `stat` but the Chrome File System is not a complete implementation.
+Files have `size` and `last modified` but directories have no size and default to the start of epoc for last modified. 
 
 # Contributors 
 
