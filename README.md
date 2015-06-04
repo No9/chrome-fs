@@ -15,7 +15,8 @@ $ browserify -r chrome-fs:fs index.js -o bundle.js
 This list is based on the node.js documentation https://nodejs.org/api/fs.html 
 Sync apis won't be supported they are listed here https://github.com/No9/chrome-fs/wiki/API-Mapping 
 
-- [x] rs.rename(oldPath, newPath, callback)
+#### fs
+- [x] fs.rename(oldPath, newPath, callback)
 - [x] fs.ftruncate(fd, len, callback)
 - [x] fs.truncate(path, len, callback)
 - [x] fs.chown(path, uid, gid, callback)
@@ -50,22 +51,27 @@ Sync apis won't be supported they are listed here https://github.com/No9/chrome-
 - [ ] fs.watch(filename[, options][, listener])
 - [x] fs.exists(path, callback)
 - [ ] fs.access(path[, mode], callback)
-Class: - [ ] fs.Stats
-Stat Time Values
 - [ ] fs.createReadStream(path[, options])
-    - Class: 
+
+#### Class: - fs.Stats 
+- [ ] fs.Stats
+- [ ] Stat Time Values
+
+#### Class: - fs.ReadStream 
 - [ ] fs.ReadStream
-    - Event: 'open'
+- [ ] Event: 'open'
 - [ ] fs.createWriteStream(path[, options])
-Class: 
+
+#### Class: - fs.WriteStream 
 - [ ] fs.WriteStream
-    - Event: 'open'
-    - file.bytesWritten
-Class: 
+- [ ] Event: 'open'
+- [ ] file.bytesWritten
+
+#### Class: - fs.FSWatcher 
 - [ ] fs.FSWatcher
-    - watcher.close()
-    - Event: 'change'
-    - Event: 'error'
+- [ ] watcher.close()
+- [ ] Event: 'change'
+- [ ] Event: 'error'
 
 ## Test 
 
