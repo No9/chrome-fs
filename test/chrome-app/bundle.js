@@ -6292,10 +6292,12 @@ var test_fs_stat = require('../simple/test-fs-stat') // eslint-disable-line
 var test_fs_exists = require('../simple/test-fs-exists') // eslint-disable-line
 var test_fs_write_file = require('../simple/test-fs-write-file') // eslint-disable-line
 var test_fs_append_file = require('../simple/test-fs-append-file') // eslint-disable-line
+var test_fs_mkdir = require('../simple/test-fs-mkdir') // eslint-disable-line
+
 // var test_fs_empty_readStream = require('../simple/test-fs-empty-readStream') // eslint-disable-line
 // var read_stream_fd_test = require('../simple/test-fs-read-stream-fd') // eslint-disable-line
 
-},{"../simple/test-fs-append-file":29,"../simple/test-fs-exists":30,"../simple/test-fs-stat":31,"../simple/test-fs-write-file":32}],28:[function(require,module,exports){
+},{"../simple/test-fs-append-file":29,"../simple/test-fs-exists":30,"../simple/test-fs-mkdir":31,"../simple/test-fs-stat":32,"../simple/test-fs-write-file":33}],28:[function(require,module,exports){
 exports.tmpDir = '/'
 exports.error = function (msg) {
   console.log(msg)
@@ -6443,6 +6445,108 @@ fs.writeFile(f, 'Some lorum impsum', function () {
 })
 
 },{"../../chrome":26,"assert":1}],31:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+var fs = require('../../chrome')
+
+var pathname = common.tmpDir + 'test1'
+var ncalls = 0
+var ncalls2 = 0
+// Test create of an existing dir doesn't throw
+
+fs.mkdir(pathname, function (err) {
+  assert.equal(err, null)
+  ncalls++
+  fs.mkdir(pathname, function (err) {
+    assert.equal(err, null)
+    ncalls++
+    assert.equal(ncalls, 2)
+    fs.rmdir(pathname, function () {
+      console.log('success mkdir 1')
+    })
+  })
+})
+
+// Test for mod creation
+var pathname2 = common.tmpDir + '/test2'
+
+fs.mkdir(pathname2, 511, function (err) {
+  assert.equal(err, null)
+  ncalls2++
+  fs.exists(pathname2, function (exists) {
+    ncalls2++
+    fs.rmdir(pathname2, function () {
+      assert(ncalls2, 2)
+      console.log('success mkdir 2')
+    })
+  })
+})
+
+/*
+fs.mkdir(pathname, function (err) {
+    assert.equal(err, null)
+    fs.rmdir(dirname, function () {
+      console.log('rmdir success')
+    })
+})
+
+(function() {
+  var ncalls = 0;
+  var pathname = common.tmpDir + '/test2';
+
+  unlink(pathname);
+
+  fs.mkdir(pathname, 511, function(err) {
+    assert.equal(err, null);
+    assert.equal(fs.existsSync(pathname), true);
+    ncalls++;
+  });
+
+  process.on('exit', function() {
+    unlink(pathname);
+    assert.equal(ncalls, 1);
+  });
+})();
+
+(function() {
+  var pathname = common.tmpDir + '/test3';
+
+  unlink(pathname);
+  fs.mkdirSync(pathname);
+
+  var exists = fs.existsSync(pathname);
+  unlink(pathname);
+
+  assert.equal(exists, true);
+})();
+
+// Keep the event loop alive so the async mkdir() requests
+// have a chance to run (since they don't ref the event loop).
+process.nextTick(function() {});
+*/
+
+},{"../../chrome":26,"../common":28,"assert":1}],32:[function(require,module,exports){
 (function (global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -6568,7 +6672,7 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
 })
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../chrome":26,"assert":1}],32:[function(require,module,exports){
+},{"../../chrome":26,"assert":1}],33:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
