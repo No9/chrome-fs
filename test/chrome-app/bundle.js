@@ -5541,7 +5541,7 @@ exports.readdir = function (path, callback) {
           dirReader.readEntries(function (entries) {
             var fullPathList = []
             for (var i = 0; i < entries.length; i++) {
-              fullPathList.push(entries[i].fullPath)
+              fullPathList.push(entries[i].name)
             }
             callback(null, fullPathList)
           }, callback)
@@ -6293,11 +6293,12 @@ var test_fs_exists = require('../simple/test-fs-exists') // eslint-disable-line
 var test_fs_write_file = require('../simple/test-fs-write-file') // eslint-disable-line
 var test_fs_append_file = require('../simple/test-fs-append-file') // eslint-disable-line
 var test_fs_mkdir = require('../simple/test-fs-mkdir') // eslint-disable-line
+var test_readdir = require('../simple/test-readdir') // eslint-disable-line
 
 // var test_fs_empty_readStream = require('../simple/test-fs-empty-readStream') // eslint-disable-line
 // var read_stream_fd_test = require('../simple/test-fs-read-stream-fd') // eslint-disable-line
 
-},{"../simple/test-fs-append-file":29,"../simple/test-fs-exists":30,"../simple/test-fs-mkdir":31,"../simple/test-fs-stat":32,"../simple/test-fs-write-file":33}],28:[function(require,module,exports){
+},{"../simple/test-fs-append-file":29,"../simple/test-fs-exists":30,"../simple/test-fs-mkdir":31,"../simple/test-fs-stat":32,"../simple/test-fs-write-file":33,"../simple/test-readdir":34}],28:[function(require,module,exports){
 exports.tmpDir = '/'
 exports.error = function (msg) {
   console.log(msg)
@@ -6502,49 +6503,6 @@ fs.mkdir(pathname2, 511, function (err) {
     })
   })
 })
-
-/*
-fs.mkdir(pathname, function (err) {
-    assert.equal(err, null)
-    fs.rmdir(dirname, function () {
-      console.log('rmdir success')
-    })
-})
-
-(function() {
-  var ncalls = 0;
-  var pathname = common.tmpDir + '/test2';
-
-  unlink(pathname);
-
-  fs.mkdir(pathname, 511, function(err) {
-    assert.equal(err, null);
-    assert.equal(fs.existsSync(pathname), true);
-    ncalls++;
-  });
-
-  process.on('exit', function() {
-    unlink(pathname);
-    assert.equal(ncalls, 1);
-  });
-})();
-
-(function() {
-  var pathname = common.tmpDir + '/test3';
-
-  unlink(pathname);
-  fs.mkdirSync(pathname);
-
-  var exists = fs.existsSync(pathname);
-  unlink(pathname);
-
-  assert.equal(exists, true);
-})();
-
-// Keep the event loop alive so the async mkdir() requests
-// have a chance to run (since they don't ref the event loop).
-process.nextTick(function() {});
-*/
 
 },{"../../chrome":26,"../common":28,"assert":1}],32:[function(require,module,exports){
 (function (global){
@@ -6809,4 +6767,75 @@ fs.writeFile(filename3, n, { mode: m }, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":26,"../common":28,"assert":1,"buffer":2,"path":9}]},{},[27]);
+},{"../../chrome":26,"../common":28,"assert":1,"buffer":2,"path":9}],34:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+var path = require('path')
+var fs = require('../../chrome')
+var readdirDir = path.join(common.tmpDir, 'readdir')
+var files = ['test.txt']
+console.log('readdir ' + readdirDir)
+
+fs.mkdir(readdirDir, function (err) {
+  assert.equal(err, null)
+  fs.writeFile(readdirDir + '/test.txt', '', function (err) {
+    assert.equal(err, null)
+    fs.readdir(readdirDir, function (err, f) {
+      assert.equal(err, null)
+      console.dir(f)
+      assert.deepEqual(files, f)
+      fs.unlink(readdirDir + '/test.txt', function (err) {
+        assert.equal(err, null)
+        fs.rmdir(readdirDir, function (err) {
+          assert.equal(err, null)
+          console.log('success readdir 1')
+        })
+      })
+    })
+  })
+})
+
+// readdir() on file should throw Error
+// *nix error ENOENT not supported
+// https://github.com/joyent/node/issues/1869
+var readdirDir2 = path.join(common.tmpDir, 'readdir2')
+
+fs.mkdir(readdirDir2, function (err) {
+  assert.equal(err, null)
+  fs.writeFile(readdirDir2 + '/test2.txt', '', function (err) {
+    assert.equal(err, null)
+    fs.readdir(readdirDir2 + '/test2.txt', function (err, f) {
+      assert.ok(err, 'Expected error from file readdir')
+      fs.unlink(readdirDir2 + '/test2.txt', function (err) {
+        assert.equal(err, null)
+        fs.rmdir(readdirDir2, function (err) {
+          assert.equal(err, null)
+          console.log('success readdir 2')
+        })
+      })
+    })
+  })
+})
+
+},{"../../chrome":26,"../common":28,"assert":1,"path":9}]},{},[27]);

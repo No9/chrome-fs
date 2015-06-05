@@ -183,7 +183,7 @@ exports.readdir = function (path, callback) {
           dirReader.readEntries(function (entries) {
             var fullPathList = []
             for (var i = 0; i < entries.length; i++) {
-              fullPathList.push(entries[i].fullPath)
+              fullPathList.push(entries[i].name)
             }
             callback(null, fullPathList)
           }, callback)
