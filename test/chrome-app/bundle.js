@@ -5825,7 +5825,7 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
     fd.onerror = callback
     var bufblob = new Blob([buffer.slice(offset, length)], {type: 'application/octet-binary'}) // eslint-disable-line
     fd.write(bufblob)
-    callback()
+    window.setTimeout(callback, 0, null, buffer)
   }
 
   if (util.isString(buffer)) {
@@ -5848,7 +5848,7 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
     fd.seek(position)
   }
   fd.write(blob)
-  callback()
+  window.setTimeout(callback, 0, null, buffer)
 }
 
 exports.unlink = function (fd, callback) {
@@ -6293,12 +6293,13 @@ var test_fs_exists = require('../simple/test-fs-exists') // eslint-disable-line
 var test_fs_write_file = require('../simple/test-fs-write-file') // eslint-disable-line
 var test_fs_append_file = require('../simple/test-fs-append-file') // eslint-disable-line
 var test_fs_mkdir = require('../simple/test-fs-mkdir') // eslint-disable-line
-var test_readdir = require('../simple/test-readdir') // eslint-disable-line
+var test_readdir = require('../simple/test-fs-readdir') // eslint-disable-line
+var test_fs_write = require('../simple/test-fs-write') // eslint-disable-line
 
 // var test_fs_empty_readStream = require('../simple/test-fs-empty-readStream') // eslint-disable-line
 // var read_stream_fd_test = require('../simple/test-fs-read-stream-fd') // eslint-disable-line
 
-},{"../simple/test-fs-append-file":29,"../simple/test-fs-exists":30,"../simple/test-fs-mkdir":31,"../simple/test-fs-stat":32,"../simple/test-fs-write-file":33,"../simple/test-readdir":34}],28:[function(require,module,exports){
+},{"../simple/test-fs-append-file":29,"../simple/test-fs-exists":30,"../simple/test-fs-mkdir":31,"../simple/test-fs-readdir":32,"../simple/test-fs-stat":33,"../simple/test-fs-write":35,"../simple/test-fs-write-file":34}],28:[function(require,module,exports){
 exports.tmpDir = '/'
 exports.error = function (msg) {
   console.log(msg)
@@ -6505,6 +6506,77 @@ fs.mkdir(pathname2, 511, function (err) {
 })
 
 },{"../../chrome":26,"../common":28,"assert":1}],32:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+var path = require('path')
+var fs = require('../../chrome')
+var readdirDir = path.join(common.tmpDir, 'readdir')
+var files = ['test.txt']
+console.log('readdir ' + readdirDir)
+
+fs.mkdir(readdirDir, function (err) {
+  assert.equal(err, null)
+  fs.writeFile(readdirDir + '/test.txt', '', function (err) {
+    assert.equal(err, null)
+    fs.readdir(readdirDir, function (err, f) {
+      assert.equal(err, null)
+      console.dir(f)
+      assert.deepEqual(files, f)
+      fs.unlink(readdirDir + '/test.txt', function (err) {
+        assert.equal(err, null)
+        fs.rmdir(readdirDir, function (err) {
+          assert.equal(err, null)
+          console.log('success readdir 1')
+        })
+      })
+    })
+  })
+})
+
+// readdir() on file should throw Error
+// *nix error ENOENT not supported
+// https://github.com/joyent/node/issues/1869
+var readdirDir2 = path.join(common.tmpDir, 'readdir2')
+
+fs.mkdir(readdirDir2, function (err) {
+  assert.equal(err, null)
+  fs.writeFile(readdirDir2 + '/test2.txt', '', function (err) {
+    assert.equal(err, null)
+    fs.readdir(readdirDir2 + '/test2.txt', function (err, f) {
+      assert.ok(err, 'Expected error from file readdir')
+      fs.unlink(readdirDir2 + '/test2.txt', function (err) {
+        assert.equal(err, null)
+        fs.rmdir(readdirDir2, function (err) {
+          assert.equal(err, null)
+          console.log('success readdir 2')
+        })
+      })
+    })
+  })
+})
+
+},{"../../chrome":26,"../common":28,"assert":1,"path":9}],33:[function(require,module,exports){
 (function (global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -6630,7 +6702,7 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
 })
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../chrome":26,"assert":1}],33:[function(require,module,exports){
+},{"../../chrome":26,"assert":1}],34:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -6767,7 +6839,7 @@ fs.writeFile(filename3, n, { mode: m }, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":26,"../common":28,"assert":1,"buffer":2,"path":9}],34:[function(require,module,exports){
+},{"../../chrome":26,"../common":28,"assert":1,"buffer":2,"path":9}],35:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -6792,50 +6864,60 @@ fs.writeFile(filename3, n, { mode: m }, function (e) {
 var common = require('../common')
 var assert = require('assert')
 var path = require('path')
+var Buffer = require('buffer').Buffer // eslint-disable-line
 var fs = require('../../chrome')
-var readdirDir = path.join(common.tmpDir, 'readdir')
-var files = ['test.txt']
-console.log('readdir ' + readdirDir)
+var fn = path.join(common.tmpDir, 'write.txt')
+// var fn2 = path.join(common.tmpDir, 'write2.txt')
+var expected = 'ümlaut.' // eslint-disable-line
+// var constants = require('constants')
 
-fs.mkdir(readdirDir, function (err) {
+fs.open(fn, 'w', '0644', function (err, fd) {
   assert.equal(err, null)
-  fs.writeFile(readdirDir + '/test.txt', '', function (err) {
+  fs.write(fd, '', 0, 'utf8', function (err, written) {
     assert.equal(err, null)
-    fs.readdir(readdirDir, function (err, f) {
+    assert.equal(0, written)
+  })
+  fs.write(fd, expected, 0, 'utf8', function (err, written) {
+    assert.equal(err, null)
+    assert.equal(Buffer.byteLength(expected), written)
+    fs.close(fd, function (err) {
       assert.equal(err, null)
-      console.dir(f)
-      assert.deepEqual(files, f)
-      fs.unlink(readdirDir + '/test.txt', function (err) {
+      fs.readFile(fn, 'utf8', function (err, found) {
         assert.equal(err, null)
-        fs.rmdir(readdirDir, function (err) {
+        console.log('expected: "%s"', expected)
+        console.log('found: "%s"', found)
+        fs.unlink(fn, function (err) {
           assert.equal(err, null)
-          console.log('success readdir 1')
         })
       })
     })
   })
 })
 
-// readdir() on file should throw Error
-// *nix error ENOENT not supported
-// https://github.com/joyent/node/issues/1869
-var readdirDir2 = path.join(common.tmpDir, 'readdir2')
-
-fs.mkdir(readdirDir2, function (err) {
-  assert.equal(err, null)
-  fs.writeFile(readdirDir2 + '/test2.txt', '', function (err) {
-    assert.equal(err, null)
-    fs.readdir(readdirDir2 + '/test2.txt', function (err, f) {
-      assert.ok(err, 'Expected error from file readdir')
-      fs.unlink(readdirDir2 + '/test2.txt', function (err) {
-        assert.equal(err, null)
-        fs.rmdir(readdirDir2, function (err) {
-          assert.equal(err, null)
-          console.log('success readdir 2')
-        })
-      })
-    })
+/*
+fs.open(fn2, constants.O_CREAT | constants.O_WRONLY | constants.O_TRUNC, '0644',
+function (err, fd) {
+  if (err) throw err
+  console.log('open done')
+  fs.write(fd, '', 0, 'utf8', function (err, written) {
+    assert.equal(0, written)
+  })
+  fs.write(fd, expected, 0, 'utf8', function (err, written) {
+    console.log('write done')
+    if (err) throw err
+    assert.equal(Buffer.byteLength(expected), written)
+    fs.closeSync(fd)
+    found2 = fs.readFileSync(fn2, 'utf8')
+    console.log('expected: "%s"', expected)
+    console.log('found: "%s"', found2)
+    fs.unlinkSync(fn2)
   })
 })
 
-},{"../../chrome":26,"../common":28,"assert":1,"path":9}]},{},[27]);
+process.on('exit', function () {
+  assert.equal(expected, found)
+  assert.equal(expected, found2)
+})
+*/
+
+},{"../../chrome":26,"../common":28,"assert":1,"buffer":2,"path":9}]},{},[27]);

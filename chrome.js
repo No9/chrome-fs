@@ -467,7 +467,7 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
     fd.onerror = callback
     var bufblob = new Blob([buffer.slice(offset, length)], {type: 'application/octet-binary'}) // eslint-disable-line
     fd.write(bufblob)
-    callback()
+    window.setTimeout(callback, 0, null, buffer)
   }
 
   if (util.isString(buffer)) {
@@ -490,7 +490,7 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
     fd.seek(position)
   }
   fd.write(blob)
-  callback()
+  window.setTimeout(callback, 0, null, buffer)
 }
 
 exports.unlink = function (fd, callback) {
