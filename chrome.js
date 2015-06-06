@@ -465,9 +465,10 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
     }
     callback = maybeCallback(callback)
     fd.onerror = callback
-    var bufblob = new Blob([buffer.slice(offset, length)], {type: 'application/octet-binary'}) // eslint-disable-line
+    var tmpbuf = buffer.slice(offset, length)
+    var bufblob = new Blob([tmpbuf], {type: 'application/octet-binary'}) // eslint-disable-line
     fd.write(bufblob)
-    window.setTimeout(callback, 0, null, buffer)
+    window.setTimeout(callback, 0, null, tmpbuf.length)
   }
 
   if (util.isString(buffer)) {
@@ -486,11 +487,32 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
   callback = maybeCallback(position)
   fd.onerror = callback
   var blob = new Blob([buffer], {type: 'text/plain'}) // eslint-disable-line
-  if (position !== null) {
-    fd.seek(position)
+
+  var buf = new Buffer(buffer)
+  if (fd.readyState > 0) {
+    if (position !== null) {
+      window.setTimeout(delayedPositionWrite, 0, position, blob, callback, buf.length, fd)
+    } else {
+      window.setTimeout(delayedWrite, 0, blob, callback, buf.length, fd)
+    }
+  } else {
+    if (position !== null) {
+      fd.seek(position)
+    }
+    fd.write(blob)
+    window.setTimeout(callback, 0, null, buf.length)
   }
+}
+
+function delayedPositionWrite (position, blob, cb, length, fd) {
+  fd.seek(position)
   fd.write(blob)
-  window.setTimeout(callback, 0, null, buffer)
+  cb(null, length)
+}
+
+function delayedWrite (blob, cb, length, fd) {
+  fd.write(blob)
+  cb(null, length)
 }
 
 exports.unlink = function (fd, callback) {
@@ -608,7 +630,10 @@ exports.appendFile = function (path, data, options, cb) {
 }
 
 exports.close = function (fd, callback) {
-  fd.onwriteend = makeCallback(callback)
+  fd.onwriteend = function (info) {
+    var cb = makeCallback(callback)
+    cb(null, info)
+  }
 }
 
 exports.createReadStream = function (path, options) {

@@ -44,6 +44,7 @@ fs.open(fn, 'w', '0644', function (err, fd) {
         assert.equal(err, null)
         console.log('expected: "%s"', expected)
         console.log('found: "%s"', found)
+       // assert.equal(expected, found, 'Umlaut test')
         fs.unlink(fn, function (err) {
           assert.equal(err, null)
         })
