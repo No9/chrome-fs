@@ -5359,6 +5359,7 @@ function hasOwnProperty(obj, prop) {
 var util = require('util')
 var Buffer = require('buffer').Buffer
 var Stream = require('stream').Stream
+
 var Readable = Stream.Readable
 var Writable = Stream.Writable
 
@@ -5847,30 +5848,22 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
   var blob = new Blob([buffer], {type: 'text/plain'}) // eslint-disable-line
 
   var buf = new Buffer(buffer)
+
   if (fd.readyState > 0) {
-    if (position !== null) {
-      window.setTimeout(delayedPositionWrite, 0, position, blob, callback, buf.length, fd)
-    } else {
-      window.setTimeout(delayedWrite, 0, blob, callback, buf.length, fd)
+    fd.onwriteend = function () {
+      if (position !== null) {
+        fd.seek(position)
+      }
+      fd.write(blob)
+      callback(null, buf.length)
     }
   } else {
     if (position !== null) {
       fd.seek(position)
     }
     fd.write(blob)
-    window.setTimeout(callback, 0, null, buf.length)
+    callback(null, buf.length)
   }
-}
-
-function delayedPositionWrite (position, blob, cb, length, fd) {
-  fd.seek(position)
-  fd.write(blob)
-  cb(null, length)
-}
-
-function delayedWrite (blob, cb, length, fd) {
-  fd.write(blob)
-  cb(null, length)
 }
 
 exports.unlink = function (fd, callback) {
@@ -6256,74 +6249,20 @@ WriteStream.prototype.close = ReadStream.prototype.close
 
 // There is no shutdown() for files.
 WriteStream.prototype.destroySoon = WriteStream.prototype.end
-/*
-fs.rename(oldPath, newPath, callback)
-fs.ftruncate(fd, len, callback)
-fs.truncate(path, len, callback)
-fs.chown(path, uid, gid, callback)
-fs.fchown(fd, uid, gid, callback)
-fs.lchown(path, uid, gid, callback)
-fs.chmod(path, mode, callback)
-fs.fchmod(fd, mode, callback)
-fs.lchmod(path, mode, callback)
-fs.stat(path, callback)
-fs.lstat(path, callback)
-fs.fstat(fd, callback)
-fs.link(srcpath, dstpath, callback)
-fs.symlink(srcpath, dstpath[, type], callback)
-fs.readlink(path, callback)
-fs.realpath(path[, cache], callback)
-fs.unlink(path, callback)
-fs.rmdir(path, callback)
-fs.mkdir(path[, mode], callback)
-fs.readdir(path, callback)
-fs.close(fd, callback)
-fs.open(path, flags[, mode], callback)
-fs.utimes(path, atime, mtime, callback)
-fs.futimes(fd, atime, mtime, callback)
-fs.fsync(fd, callback)
-fs.write(fd, buffer, offset, length[, position], callback)
-fs.write(fd, data[, position[, encoding]], callback)
-fs.read(fd, buffer, offset, length, position, callback)
-fs.readFile(filename[, options], callback)
-fs.writeFile(filename, data[, options], callback)
-fs.appendFile(filename, data[, options], callback)
-fs.watchFile(filename[, options], listener)
-fs.unwatchFile(filename[, listener])
-fs.watch(filename[, options][, listener])
-Caveats
-Availability
-Filename Argument
-fs.exists(path, callback)
-fs.access(path[, mode], callback)
-Class: fs.Stats
-Stat Time Values
-fs.createReadStream(path[, options])
-	Class: fs.ReadStream
-	Event: 'open'
-fs.createWriteStream(path[, options])
-Class: fs.WriteStream
-	Event: 'open'
-	file.bytesWritten
-Class: fs.FSWatcher
-	watcher.close()
-	Event: 'change'
-	Event: 'error'
-*/
 
 }).call(this,require('_process'))
 },{"_process":10,"buffer":2,"stream":22,"util":25}],27:[function(require,module,exports){
-require('../simple/test-fs-stat') // eslint-disable-line
-require('../simple/test-fs-exists') // eslint-disable-line
-require('../simple/test-fs-write-file') // eslint-disable-line
-require('../simple/test-fs-append-file') // eslint-disable-line
-require('../simple/test-fs-mkdir') // eslint-disable-line
-require('../simple/test-fs-readdir') // eslint-disable-line
-require('../simple/test-fs-write') // eslint-disable-line
-require('../simple/test-fs-write-buffer') // eslint-disable-line
+require('../simple/test-fs-stat')
+require('../simple/test-fs-exists')
+require('../simple/test-fs-write-file')
+require('../simple/test-fs-append-file')
+require('../simple/test-fs-mkdir')
+require('../simple/test-fs-readdir')
+require('../simple/test-fs-write')
+require('../simple/test-fs-write-buffer')
 
-// var test_fs_empty_readStream = require('../simple/test-fs-empty-readStream') // eslint-disable-line
-// var read_stream_fd_test = require('../simple/test-fs-read-stream-fd') // eslint-disable-line
+// require('../simple/test-fs-empty-readStream')
+// require('../simple/test-fs-read-stream-fd')
 
 },{"../simple/test-fs-append-file":29,"../simple/test-fs-exists":30,"../simple/test-fs-mkdir":31,"../simple/test-fs-readdir":32,"../simple/test-fs-stat":33,"../simple/test-fs-write":36,"../simple/test-fs-write-buffer":34,"../simple/test-fs-write-file":35}],28:[function(require,module,exports){
 exports.tmpDir = '/'
