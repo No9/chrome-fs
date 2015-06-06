@@ -630,9 +630,9 @@ exports.appendFile = function (path, data, options, cb) {
 }
 
 exports.close = function (fd, callback) {
-  fd.onwriteend = function (info) {
+  fd.onwriteend = function (progressinfo) {
     var cb = makeCallback(callback)
-    cb(null, info)
+    cb(null, progressinfo)
   }
 }
 
