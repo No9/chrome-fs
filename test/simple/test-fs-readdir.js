@@ -39,7 +39,7 @@ fs.mkdir(readdirDir, function (err) {
         assert.equal(err, null)
         fs.rmdir(readdirDir, function (err) {
           assert.equal(err, null)
-          console.log('success readdir 1')
+          console.log('test-fs-readdir 1 success')
         })
       })
     })
@@ -61,7 +61,7 @@ fs.mkdir(readdirDir2, function (err) {
         assert.equal(err, null)
         fs.rmdir(readdirDir2, function (err) {
           assert.equal(err, null)
-          console.log('success readdir 2')
+          console.log('test-fs-readdir 2 success')
         })
       })
     })

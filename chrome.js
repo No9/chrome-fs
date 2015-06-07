@@ -76,6 +76,9 @@ function rethrow () {
 }
 
 function resolve (path) {
+  if (typeof path !== 'string') {
+    throw Error('Cannot resolve: Paths must be strings')
+  }
   var retString = path
   if (retString[0] === '/') {
     retString = retString.slice(1)
@@ -392,6 +395,7 @@ exports.open = function (path, flags, mode, callback) {
 
 exports.read = function (fd, buffer, offset, length, position, callback) {
   if (!util.isBuffer(buffer)) {
+    // fs.read(fd, expected.length, 0, 'utf-8', function (err, str, bytesRead)
     // legacy string interface (fd, length, position, encoding, callback)
     var cb = arguments[4]
     var encoding = arguments[3]
@@ -403,17 +407,28 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
     buffer = new Buffer(length)
     offset = 0
 
-    callback = function (err, bytesRead) {
+    callback = function (err, bytesRead, data) {
       if (!cb) return
-      var str = (bytesRead > 0) ? buffer.toString(encoding, 0, bytesRead) : '' // eslint-disable-line
-      (cb) (err, str, bytesRead)
+      var str = ''
+      if (fd.type === 'text/plain') {
+        str = data
+      } else {
+        str = (bytesRead > 0) ? buffer.toString(encoding, 0, bytesRead) : '' // eslint-disable-line
+      }
+      (cb)(err, str, bytesRead)
     }
   }
   fd.onerror = callback
   var data = fd.slice(offset, length)
   var fileReader = new FileReader() // eslint-disable-line
   fileReader.onload = function (evt) {
-    callback(null, this.result.length, this.result)
+    var result
+    if (util.isBuffer(buffer) && typeof this.result === 'string') {
+      result = new Buffer(this.result)
+    } else {
+      result = this.result
+    }
+    callback(null, result.length, result)
   }
   fileReader.onerror = function (evt) {
     callback(evt, null)

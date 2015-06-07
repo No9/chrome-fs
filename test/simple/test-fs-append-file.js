@@ -54,7 +54,7 @@ fs.appendFile(appfilename, currentFileData, function (e) {
     ncallbacks++
     assert.equal(Buffer.byteLength(currentFileData), buffer.length)
     assert.equal(2, ncallbacks, 'test-fs-append-file-1')
-    console.log('test-fs-append-file-1 success')
+    console.log('test-fs-append-file 1 success')
     // test that appends data to a non empty file
     fs.appendFile(appfilename, s, function (e) {
       console.log('appendFile 2')
@@ -74,7 +74,7 @@ fs.appendFile(appfilename, currentFileData, function (e) {
             assert.fail(err)
           }
           assert.equal(2, ncallbacks2, 'test-fs-append-file-2')
-          console.log('test-fs-append-file-2 success')
+          console.log('test-fs-append-file 2 success')
         })
       })
     })

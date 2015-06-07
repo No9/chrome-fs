@@ -19,32 +19,27 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+var common = require('../common')
+var assert = require('assert')
+var path = require('path')
+var Buffer = require('buffer').Buffer
+var fs = require('../../chrome')
+var filepath = path.join(common.fixturesDir, 'buffedx.txt')
+var expected = 'xyz\n'
+var bufferAsync = new Buffer(expected.length)
 
-
-
-var common = require('../common');
-var assert = require('assert');
-var path = require('path'),
-    Buffer = require('buffer').Buffer,
-    fs = require('fs'),
-    filepath = path.join(common.fixturesDir, 'x.txt'),
-    fd = fs.openSync(filepath, 'r'),
-    expected = 'xyz\n',
-    bufferAsync = new Buffer(expected.length),
-    bufferSync = new Buffer(expected.length),
-    readCalled = 0;
-
-fs.read(fd, bufferAsync, 0, expected.length, 0, function(err, bytesRead) {
-  readCalled++;
-
-  assert.equal(bytesRead, expected.length);
-  assert.deepEqual(bufferAsync, new Buffer(expected));
-});
-
-var r = fs.readSync(fd, bufferSync, 0, expected.length, 0);
-assert.deepEqual(bufferSync, new Buffer(expected));
-assert.equal(r, expected.length);
-
-process.on('exit', function() {
-  assert.equal(readCalled, 1);
-});
+fs.writeFile(filepath, expected, function (err) {
+  assert.ok(!err)
+  fs.open(filepath, 'r', '0644', function (err, fd) {
+    assert.ok(!err)
+    fs.read(fd, bufferAsync, 0, expected.length, 0, function (err, bytesRead, data) {
+      assert.equal(err, null)
+      assert.equal(bytesRead, expected.length, 'buffers are not the same size')
+      assert.deepEqual(data, new Buffer(expected))
+      fs.unlink(filepath, function (err) {
+        assert.ok(!err)
+        console.log('test-fs-read-buffer success')
+      })
+    })
+  })
+})

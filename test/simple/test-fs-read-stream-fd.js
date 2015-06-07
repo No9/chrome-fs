@@ -47,7 +47,7 @@ fs.writeFile(file, input, function (e) {
         if (err) {
           assert.fail(err)
         }
-        console.log('read_stream_fd_test success')
+        console.log('test-fs-read-stream-fd success')
       })
       assert.equal(output, input)
 

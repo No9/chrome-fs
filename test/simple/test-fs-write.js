@@ -45,7 +45,7 @@ fs.open(fn, 'w', '0644', function (err, fd) {
         assert.equal(expected, found, 'Umlaut test')
         fs.unlink(fn, function (err) {
           assert.equal(err, null)
-          console.log('test-fs-write success 1')
+          console.log('test-fs-write 1 success')
         })
       })
     })
@@ -54,7 +54,6 @@ fs.open(fn, 'w', '0644', function (err, fd) {
 
 fs.open(fn2, constants.O_CREAT | constants.O_WRONLY | constants.O_TRUNC, '0644',
 function (err, fd) {
-  console.log(err)
   assert.equal(err, null)
   console.log('open done')
   fs.write(fd, '', 0, 'utf8', function (err, written) {
@@ -71,7 +70,7 @@ function (err, fd) {
         assert.equal(expected, found, 'Umlaut test')
         fs.unlink(fn2, function (err) {
           assert.equal(err, null)
-          console.log('test-fs-write success 2')
+          console.log('test-fs-write 2 success')
         })
       })
     })
