@@ -479,43 +479,49 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
     fd.onerror = callback
     var tmpbuf = buffer.slice(offset, length)
     var bufblob = new Blob([tmpbuf], {type: 'application/octet-binary'}) // eslint-disable-line
-    fd.write(bufblob)
-    window.setTimeout(callback, 0, null, tmpbuf.length)
-  }
-
-  if (util.isString(buffer)) {
-    buffer += ''
-  }
-
-  if (!util.isFunction(position)) {
-    if (util.isFunction(offset)) {
-      position = offset
-      offset = null
+    if (fd.readyState > 0) {
+      fd.onwriteend = function () {
+        fd.write(blob)
+        callback(null, buf.length)
+      }
     } else {
-      position = length
+      fd.write(bufblob)
+      callback(null, tmpbuf.length)
     }
-    length = 'utf8'
-  }
-  callback = maybeCallback(position)
-  fd.onerror = callback
-  var blob = new Blob([buffer], {type: 'text/plain'}) // eslint-disable-line
+  } else {
+    if (util.isString(buffer)) {
+      buffer += ''
+    }
+    if (!util.isFunction(position)) {
+      if (util.isFunction(offset)) {
+        position = offset
+        offset = null
+      } else {
+        position = length
+      }
+      length = 'utf8'
+    }
+    callback = maybeCallback(position)
+    fd.onerror = callback
+    var blob = new Blob([buffer], {type: 'text/plain'}) // eslint-disable-line
 
-  var buf = new Buffer(buffer)
+    var buf = new Buffer(buffer)
 
-  if (fd.readyState > 0) {
-    fd.onwriteend = function () {
+    if (fd.readyState > 0) {
+      fd.onwriteend = function () {
+        if (position !== null) {
+          fd.seek(position)
+        }
+        fd.write(blob)
+        callback(null, buf.length)
+      }
+    } else {
       if (position !== null) {
         fd.seek(position)
       }
       fd.write(blob)
       callback(null, buf.length)
     }
-  } else {
-    if (position !== null) {
-      fd.seek(position)
-    }
-    fd.write(blob)
-    callback(null, buf.length)
   }
 }
 

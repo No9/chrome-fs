@@ -5888,7 +5888,6 @@ exports.writeFile = function (path, data, options, cb) {
 exports.open = function (path, flags, mode, callback) {
   path = resolve(path)
   flags = flagToString(flags)
-  console.log(flags)
   callback = makeCallback(arguments[arguments.length - 1])
   mode = modeNum(mode, 438 /*=0666*/)
 
@@ -6018,43 +6017,49 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
     fd.onerror = callback
     var tmpbuf = buffer.slice(offset, length)
     var bufblob = new Blob([tmpbuf], {type: 'application/octet-binary'}) // eslint-disable-line
-    fd.write(bufblob)
-    window.setTimeout(callback, 0, null, tmpbuf.length)
-  }
-
-  if (util.isString(buffer)) {
-    buffer += ''
-  }
-
-  if (!util.isFunction(position)) {
-    if (util.isFunction(offset)) {
-      position = offset
-      offset = null
+    if (fd.readyState > 0) {
+      fd.onwriteend = function () {
+        fd.write(blob)
+        callback(null, buf.length)
+      }
     } else {
-      position = length
+      fd.write(bufblob)
+      callback(null, tmpbuf.length)
     }
-    length = 'utf8'
-  }
-  callback = maybeCallback(position)
-  fd.onerror = callback
-  var blob = new Blob([buffer], {type: 'text/plain'}) // eslint-disable-line
+  } else {
+    if (util.isString(buffer)) {
+      buffer += ''
+    }
+    if (!util.isFunction(position)) {
+      if (util.isFunction(offset)) {
+        position = offset
+        offset = null
+      } else {
+        position = length
+      }
+      length = 'utf8'
+    }
+    callback = maybeCallback(position)
+    fd.onerror = callback
+    var blob = new Blob([buffer], {type: 'text/plain'}) // eslint-disable-line
 
-  var buf = new Buffer(buffer)
+    var buf = new Buffer(buffer)
 
-  if (fd.readyState > 0) {
-    fd.onwriteend = function () {
+    if (fd.readyState > 0) {
+      fd.onwriteend = function () {
+        if (position !== null) {
+          fd.seek(position)
+        }
+        fd.write(blob)
+        callback(null, buf.length)
+      }
+    } else {
       if (position !== null) {
         fd.seek(position)
       }
       fd.write(blob)
       callback(null, buf.length)
     }
-  } else {
-    if (position !== null) {
-      fd.seek(position)
-    }
-    fd.write(blob)
-    callback(null, buf.length)
   }
 }
 
@@ -6480,11 +6485,11 @@ require('../simple/test-fs-mkdir')
 require('../simple/test-fs-readdir')
 require('../simple/test-fs-write')
 require('../simple/test-fs-write-buffer')
-
+require('../simple/test-fs-write-stream')
 // require('../simple/test-fs-empty-readStream')
 // require('../simple/test-fs-read-stream-fd')
 
-},{"../simple/test-fs-append-file":30,"../simple/test-fs-exists":31,"../simple/test-fs-mkdir":32,"../simple/test-fs-readdir":33,"../simple/test-fs-stat":34,"../simple/test-fs-write":37,"../simple/test-fs-write-buffer":35,"../simple/test-fs-write-file":36}],29:[function(require,module,exports){
+},{"../simple/test-fs-append-file":30,"../simple/test-fs-exists":31,"../simple/test-fs-mkdir":32,"../simple/test-fs-readdir":33,"../simple/test-fs-stat":34,"../simple/test-fs-write":38,"../simple/test-fs-write-buffer":35,"../simple/test-fs-write-file":36,"../simple/test-fs-write-stream":37}],29:[function(require,module,exports){
 exports.tmpDir = '/'
 exports.error = function (msg) {
   console.log(msg)
@@ -6915,7 +6920,7 @@ var path = require('path'),
     Buffer = require('buffer').Buffer,
     fs = require('../../chrome'),
     filename = path.join(common.tmpDir, 'writebuffer.txt'),
-    expected = new Buffer('hello'),
+    expected = new Buffer('hello buffer'),
     openCalled = 0,
     writeCalled = 0
 
@@ -7081,6 +7086,96 @@ fs.writeFile(filename3, n, { mode: m }, function (e) {
 
 }).call(this,require("buffer").Buffer)
 },{"../../chrome":27,"../common":29,"assert":1,"buffer":2,"path":10}],37:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+
+var path = require('path')
+var fs = require('../../chrome')
+var fn = path.join(common.tmpDir, 'write.txt')
+var file = fs.createWriteStream(fn, {
+      highWaterMark: 10
+    })
+
+var EXPECTED = '012345678910'
+
+var callbacks = {
+      open: -1,
+      drain: -2,
+      close: -1
+    }
+
+file
+  .on('open', function (fd) {
+      console.log('open!')
+      callbacks.open++
+      // Ignoring as this fd is a shim onto the Web FS API
+      // assert.equal('number', typeof fd)
+    })
+  .on('error', function (err) {
+      assert.equal(err, null)
+    })
+  .on('drain', function () {
+      console.error('drain!', callbacks.drain)
+      callbacks.drain++
+      if (callbacks.drain === -1) {
+        assert.equal(EXPECTED, fs.readFileSync(fn, 'utf8'))
+        file.write(EXPECTED)
+      } else if (callbacks.drain === 0) {
+        assert.equal(EXPECTED + EXPECTED, fs.readFileSync(fn, 'utf8'))
+        file.end()
+      }
+    })
+  .on('close', function () {
+      console.error('close!')
+      assert.strictEqual(file.bytesWritten, EXPECTED.length * 2)
+
+      callbacks.close++
+      assert.throws(function () {
+        console.error('write after end should not be allowed')
+        file.write('should not work anymore')
+      })
+      for (var k in callbacks) {
+        assert.equal(0, callbacks[k], k + ' count off by ' + callbacks[k])
+      }
+      fs.unlinkSync(fn)
+    })
+
+for (var i = 0; i < 11; i++) {
+  (function (i) {
+    file.write('' + i)
+  })(i)
+}
+/*
+process.on('exit', function () {
+  for (var k in callbacks) {
+    assert.equal(0, callbacks[k], k + ' count off by ' + callbacks[k])
+  }
+  console.log('ok')
+})
+*/
+
+},{"../../chrome":27,"../common":29,"assert":1,"path":10}],38:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a

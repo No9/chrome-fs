@@ -25,7 +25,7 @@ var path = require('path'),
     Buffer = require('buffer').Buffer,
     fs = require('../../chrome'),
     filename = path.join(common.tmpDir, 'writebuffer.txt'),
-    expected = new Buffer('hello'),
+    expected = new Buffer('hello buffer'),
     openCalled = 0,
     writeCalled = 0
 
