@@ -359,7 +359,7 @@ var objectKeys = Object.keys || function (obj) {
   return keys;
 };
 
-},{"util/":25}],2:[function(require,module,exports){
+},{"util/":26}],2:[function(require,module,exports){
 /*!
  * The buffer module from node.js, for the browser.
  *
@@ -1925,6 +1925,186 @@ module.exports = isArray || function (val) {
 };
 
 },{}],6:[function(require,module,exports){
+module.exports={
+  "O_RDONLY": 0,
+  "O_WRONLY": 1,
+  "O_RDWR": 2,
+  "S_IFMT": 61440,
+  "S_IFREG": 32768,
+  "S_IFDIR": 16384,
+  "S_IFCHR": 8192,
+  "S_IFBLK": 24576,
+  "S_IFIFO": 4096,
+  "S_IFLNK": 40960,
+  "S_IFSOCK": 49152,
+  "O_CREAT": 512,
+  "O_EXCL": 2048,
+  "O_NOCTTY": 131072,
+  "O_TRUNC": 1024,
+  "O_APPEND": 8,
+  "O_DIRECTORY": 1048576,
+  "O_NOFOLLOW": 256,
+  "O_SYNC": 128,
+  "O_SYMLINK": 2097152,
+  "S_IRWXU": 448,
+  "S_IRUSR": 256,
+  "S_IWUSR": 128,
+  "S_IXUSR": 64,
+  "S_IRWXG": 56,
+  "S_IRGRP": 32,
+  "S_IWGRP": 16,
+  "S_IXGRP": 8,
+  "S_IRWXO": 7,
+  "S_IROTH": 4,
+  "S_IWOTH": 2,
+  "S_IXOTH": 1,
+  "E2BIG": 7,
+  "EACCES": 13,
+  "EADDRINUSE": 48,
+  "EADDRNOTAVAIL": 49,
+  "EAFNOSUPPORT": 47,
+  "EAGAIN": 35,
+  "EALREADY": 37,
+  "EBADF": 9,
+  "EBADMSG": 94,
+  "EBUSY": 16,
+  "ECANCELED": 89,
+  "ECHILD": 10,
+  "ECONNABORTED": 53,
+  "ECONNREFUSED": 61,
+  "ECONNRESET": 54,
+  "EDEADLK": 11,
+  "EDESTADDRREQ": 39,
+  "EDOM": 33,
+  "EDQUOT": 69,
+  "EEXIST": 17,
+  "EFAULT": 14,
+  "EFBIG": 27,
+  "EHOSTUNREACH": 65,
+  "EIDRM": 90,
+  "EILSEQ": 92,
+  "EINPROGRESS": 36,
+  "EINTR": 4,
+  "EINVAL": 22,
+  "EIO": 5,
+  "EISCONN": 56,
+  "EISDIR": 21,
+  "ELOOP": 62,
+  "EMFILE": 24,
+  "EMLINK": 31,
+  "EMSGSIZE": 40,
+  "EMULTIHOP": 95,
+  "ENAMETOOLONG": 63,
+  "ENETDOWN": 50,
+  "ENETRESET": 52,
+  "ENETUNREACH": 51,
+  "ENFILE": 23,
+  "ENOBUFS": 55,
+  "ENODATA": 96,
+  "ENODEV": 19,
+  "ENOENT": 2,
+  "ENOEXEC": 8,
+  "ENOLCK": 77,
+  "ENOLINK": 97,
+  "ENOMEM": 12,
+  "ENOMSG": 91,
+  "ENOPROTOOPT": 42,
+  "ENOSPC": 28,
+  "ENOSR": 98,
+  "ENOSTR": 99,
+  "ENOSYS": 78,
+  "ENOTCONN": 57,
+  "ENOTDIR": 20,
+  "ENOTEMPTY": 66,
+  "ENOTSOCK": 38,
+  "ENOTSUP": 45,
+  "ENOTTY": 25,
+  "ENXIO": 6,
+  "EOPNOTSUPP": 102,
+  "EOVERFLOW": 84,
+  "EPERM": 1,
+  "EPIPE": 32,
+  "EPROTO": 100,
+  "EPROTONOSUPPORT": 43,
+  "EPROTOTYPE": 41,
+  "ERANGE": 34,
+  "EROFS": 30,
+  "ESPIPE": 29,
+  "ESRCH": 3,
+  "ESTALE": 70,
+  "ETIME": 101,
+  "ETIMEDOUT": 60,
+  "ETXTBSY": 26,
+  "EWOULDBLOCK": 35,
+  "EXDEV": 18,
+  "SIGHUP": 1,
+  "SIGINT": 2,
+  "SIGQUIT": 3,
+  "SIGILL": 4,
+  "SIGTRAP": 5,
+  "SIGABRT": 6,
+  "SIGIOT": 6,
+  "SIGBUS": 10,
+  "SIGFPE": 8,
+  "SIGKILL": 9,
+  "SIGUSR1": 30,
+  "SIGSEGV": 11,
+  "SIGUSR2": 31,
+  "SIGPIPE": 13,
+  "SIGALRM": 14,
+  "SIGTERM": 15,
+  "SIGCHLD": 20,
+  "SIGCONT": 19,
+  "SIGSTOP": 17,
+  "SIGTSTP": 18,
+  "SIGTTIN": 21,
+  "SIGTTOU": 22,
+  "SIGURG": 16,
+  "SIGXCPU": 24,
+  "SIGXFSZ": 25,
+  "SIGVTALRM": 26,
+  "SIGPROF": 27,
+  "SIGWINCH": 28,
+  "SIGIO": 23,
+  "SIGSYS": 12,
+  "SSL_OP_ALL": 2147486719,
+  "SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION": 262144,
+  "SSL_OP_CIPHER_SERVER_PREFERENCE": 4194304,
+  "SSL_OP_CISCO_ANYCONNECT": 32768,
+  "SSL_OP_COOKIE_EXCHANGE": 8192,
+  "SSL_OP_CRYPTOPRO_TLSEXT_BUG": 2147483648,
+  "SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS": 2048,
+  "SSL_OP_EPHEMERAL_RSA": 2097152,
+  "SSL_OP_LEGACY_SERVER_CONNECT": 4,
+  "SSL_OP_MICROSOFT_BIG_SSLV3_BUFFER": 32,
+  "SSL_OP_MICROSOFT_SESS_ID_BUG": 1,
+  "SSL_OP_MSIE_SSLV2_RSA_PADDING": 64,
+  "SSL_OP_NETSCAPE_CA_DN_BUG": 536870912,
+  "SSL_OP_NETSCAPE_CHALLENGE_BUG": 2,
+  "SSL_OP_NETSCAPE_DEMO_CIPHER_CHANGE_BUG": 1073741824,
+  "SSL_OP_NETSCAPE_REUSE_CIPHER_CHANGE_BUG": 8,
+  "SSL_OP_NO_COMPRESSION": 131072,
+  "SSL_OP_NO_QUERY_MTU": 4096,
+  "SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION": 65536,
+  "SSL_OP_NO_SSLv2": 16777216,
+  "SSL_OP_NO_SSLv3": 33554432,
+  "SSL_OP_NO_TICKET": 16384,
+  "SSL_OP_NO_TLSv1": 67108864,
+  "SSL_OP_NO_TLSv1_1": 268435456,
+  "SSL_OP_NO_TLSv1_2": 134217728,
+  "SSL_OP_PKCS1_CHECK_1": 0,
+  "SSL_OP_PKCS1_CHECK_2": 0,
+  "SSL_OP_SINGLE_DH_USE": 1048576,
+  "SSL_OP_SINGLE_ECDH_USE": 524288,
+  "SSL_OP_SSLEAY_080_CLIENT_DH_BUG": 128,
+  "SSL_OP_SSLREF2_REUSE_CERT_TYPE_BUG": 16,
+  "SSL_OP_TLS_BLOCK_PADDING_BUG": 512,
+  "SSL_OP_TLS_D5_BUG": 256,
+  "SSL_OP_TLS_ROLLBACK_BUG": 8388608,
+  "NPN_ENABLED": 1
+}
+
+},{}],7:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -2227,7 +2407,7 @@ function isUndefined(arg) {
   return arg === void 0;
 }
 
-},{}],7:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -2252,12 +2432,12 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],8:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 module.exports = Array.isArray || function (arr) {
   return Object.prototype.toString.call(arr) == '[object Array]';
 };
 
-},{}],9:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -2485,7 +2665,7 @@ var substr = 'ab'.substr(-1) === 'b'
 ;
 
 }).call(this,require('_process'))
-},{"_process":10}],10:[function(require,module,exports){
+},{"_process":11}],11:[function(require,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -2544,10 +2724,10 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],11:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 module.exports = require("./lib/_stream_duplex.js")
 
-},{"./lib/_stream_duplex.js":12}],12:[function(require,module,exports){
+},{"./lib/_stream_duplex.js":13}],13:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -2640,7 +2820,7 @@ function forEach (xs, f) {
 }
 
 }).call(this,require('_process'))
-},{"./_stream_readable":14,"./_stream_writable":16,"_process":10,"core-util-is":17,"inherits":7}],13:[function(require,module,exports){
+},{"./_stream_readable":15,"./_stream_writable":17,"_process":11,"core-util-is":18,"inherits":8}],14:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -2688,7 +2868,7 @@ PassThrough.prototype._transform = function(chunk, encoding, cb) {
   cb(null, chunk);
 };
 
-},{"./_stream_transform":15,"core-util-is":17,"inherits":7}],14:[function(require,module,exports){
+},{"./_stream_transform":16,"core-util-is":18,"inherits":8}],15:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -3674,7 +3854,7 @@ function indexOf (xs, x) {
 }
 
 }).call(this,require('_process'))
-},{"_process":10,"buffer":2,"core-util-is":17,"events":6,"inherits":7,"isarray":8,"stream":22,"string_decoder/":23}],15:[function(require,module,exports){
+},{"_process":11,"buffer":2,"core-util-is":18,"events":7,"inherits":8,"isarray":9,"stream":23,"string_decoder/":24}],16:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -3886,7 +4066,7 @@ function done(stream, er) {
   return stream.push(null);
 }
 
-},{"./_stream_duplex":12,"core-util-is":17,"inherits":7}],16:[function(require,module,exports){
+},{"./_stream_duplex":13,"core-util-is":18,"inherits":8}],17:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -4276,7 +4456,7 @@ function endWritable(stream, state, cb) {
 }
 
 }).call(this,require('_process'))
-},{"./_stream_duplex":12,"_process":10,"buffer":2,"core-util-is":17,"inherits":7,"stream":22}],17:[function(require,module,exports){
+},{"./_stream_duplex":13,"_process":11,"buffer":2,"core-util-is":18,"inherits":8,"stream":23}],18:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -4386,10 +4566,10 @@ function objectToString(o) {
   return Object.prototype.toString.call(o);
 }
 }).call(this,require("buffer").Buffer)
-},{"buffer":2}],18:[function(require,module,exports){
+},{"buffer":2}],19:[function(require,module,exports){
 module.exports = require("./lib/_stream_passthrough.js")
 
-},{"./lib/_stream_passthrough.js":13}],19:[function(require,module,exports){
+},{"./lib/_stream_passthrough.js":14}],20:[function(require,module,exports){
 var Stream = require('stream'); // hack to fix a circular dependency issue when used with browserify
 exports = module.exports = require('./lib/_stream_readable.js');
 exports.Stream = Stream;
@@ -4399,13 +4579,13 @@ exports.Duplex = require('./lib/_stream_duplex.js');
 exports.Transform = require('./lib/_stream_transform.js');
 exports.PassThrough = require('./lib/_stream_passthrough.js');
 
-},{"./lib/_stream_duplex.js":12,"./lib/_stream_passthrough.js":13,"./lib/_stream_readable.js":14,"./lib/_stream_transform.js":15,"./lib/_stream_writable.js":16,"stream":22}],20:[function(require,module,exports){
+},{"./lib/_stream_duplex.js":13,"./lib/_stream_passthrough.js":14,"./lib/_stream_readable.js":15,"./lib/_stream_transform.js":16,"./lib/_stream_writable.js":17,"stream":23}],21:[function(require,module,exports){
 module.exports = require("./lib/_stream_transform.js")
 
-},{"./lib/_stream_transform.js":15}],21:[function(require,module,exports){
+},{"./lib/_stream_transform.js":16}],22:[function(require,module,exports){
 module.exports = require("./lib/_stream_writable.js")
 
-},{"./lib/_stream_writable.js":16}],22:[function(require,module,exports){
+},{"./lib/_stream_writable.js":17}],23:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -4534,7 +4714,7 @@ Stream.prototype.pipe = function(dest, options) {
   return dest;
 };
 
-},{"events":6,"inherits":7,"readable-stream/duplex.js":11,"readable-stream/passthrough.js":18,"readable-stream/readable.js":19,"readable-stream/transform.js":20,"readable-stream/writable.js":21}],23:[function(require,module,exports){
+},{"events":7,"inherits":8,"readable-stream/duplex.js":12,"readable-stream/passthrough.js":19,"readable-stream/readable.js":20,"readable-stream/transform.js":21,"readable-stream/writable.js":22}],24:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -4757,14 +4937,14 @@ function base64DetectIncompleteChar(buffer) {
   this.charLength = this.charReceived ? 3 : 0;
 }
 
-},{"buffer":2}],24:[function(require,module,exports){
+},{"buffer":2}],25:[function(require,module,exports){
 module.exports = function isBuffer(arg) {
   return arg && typeof arg === 'object'
     && typeof arg.copy === 'function'
     && typeof arg.fill === 'function'
     && typeof arg.readUInt8 === 'function';
 }
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -5354,11 +5534,12 @@ function hasOwnProperty(obj, prop) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":24,"_process":10,"inherits":7}],26:[function(require,module,exports){
+},{"./support/isBuffer":25,"_process":11,"inherits":8}],27:[function(require,module,exports){
 (function (process){
 var util = require('util')
 var Buffer = require('buffer').Buffer
 var Stream = require('stream').Stream
+var constants = require('constants')
 
 var Readable = Stream.Readable
 var Writable = Stream.Writable
@@ -5367,6 +5548,15 @@ var FILESYSTEM_DEFAULT_SIZE = 250 * 1024 * 1024	// 250MB
 var DEBUG = true
 var kMinPoolSpace = 128
 var pool
+
+var O_APPEND = constants.O_APPEND || 0
+var O_CREAT = constants.O_CREAT || 0
+var O_EXCL = constants.O_EXCL || 0
+var O_RDONLY = constants.O_RDONLY || 0
+var O_RDWR = constants.O_RDWR || 0
+var O_SYNC = constants.O_SYNC || 0
+var O_TRUNC = constants.O_TRUNC || 0
+var O_WRONLY = constants.O_WRONLY || 0
 
 window.requestFileSystem = window.requestFileSystem || window.webkitRequestFileSystem
 
@@ -5697,6 +5887,8 @@ exports.writeFile = function (path, data, options, cb) {
 
 exports.open = function (path, flags, mode, callback) {
   path = resolve(path)
+  flags = flagToString(flags)
+  console.log(flags)
   callback = makeCallback(arguments[arguments.length - 1])
   mode = modeNum(mode, 438 /*=0666*/)
 
@@ -5705,7 +5897,7 @@ exports.open = function (path, flags, mode, callback) {
         window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
         function (cfs) {
           var opts = {}
-          if (flags === 'w') {
+          if (flags.indexOf('w') > -1) {
             opts = {create: true}
           }
           cfs.root.getFile(
@@ -5714,7 +5906,7 @@ exports.open = function (path, flags, mode, callback) {
                 function (fileEntry) {
                   // if its a write then we get the file writer
                   // otherwise we get the file because 'standards'
-                  if (flags === 'w') {
+                  if (flags.indexOf('w') > -1) {
                     fileEntry.createWriter(function (fileWriter) {
                       fileWriter.fullPath = fileEntry.fullPath
                       callback(null, fileWriter)
@@ -6250,8 +6442,36 @@ WriteStream.prototype.close = ReadStream.prototype.close
 // There is no shutdown() for files.
 WriteStream.prototype.destroySoon = WriteStream.prototype.end
 
+function flagToString (flag) {
+  // Only mess with strings
+  if (util.isString(flag)) {
+    return flag
+  }
+
+  switch (flag) {
+    case O_RDONLY : return 'r'
+    case O_RDONLY | O_SYNC : return 'sr'
+    case O_RDWR : return 'r+'
+    case O_RDWR | O_SYNC : return 'sr+'
+
+    case O_TRUNC | O_CREAT | O_WRONLY : return 'w'
+    case O_TRUNC | O_CREAT | O_WRONLY | O_EXCL : return 'xw'
+
+    case O_TRUNC | O_CREAT | O_RDWR : return 'w+'
+    case O_TRUNC | O_CREAT | O_RDWR | O_EXCL : return 'xw+'
+
+    case O_APPEND | O_CREAT | O_WRONLY : return 'a'
+    case O_APPEND | O_CREAT | O_WRONLY | O_EXCL : return 'xa'
+
+    case O_APPEND | O_CREAT | O_RDWR : return 'a+'
+    case O_APPEND | O_CREAT | O_RDWR | O_EXCL : return 'xa+'
+  }
+
+  throw new Error('Unknown file open flag: ' + flag)
+}
+
 }).call(this,require('_process'))
-},{"_process":10,"buffer":2,"stream":22,"util":25}],27:[function(require,module,exports){
+},{"_process":11,"buffer":2,"constants":6,"stream":23,"util":26}],28:[function(require,module,exports){
 require('../simple/test-fs-stat')
 require('../simple/test-fs-exists')
 require('../simple/test-fs-write-file')
@@ -6264,14 +6484,14 @@ require('../simple/test-fs-write-buffer')
 // require('../simple/test-fs-empty-readStream')
 // require('../simple/test-fs-read-stream-fd')
 
-},{"../simple/test-fs-append-file":29,"../simple/test-fs-exists":30,"../simple/test-fs-mkdir":31,"../simple/test-fs-readdir":32,"../simple/test-fs-stat":33,"../simple/test-fs-write":36,"../simple/test-fs-write-buffer":34,"../simple/test-fs-write-file":35}],28:[function(require,module,exports){
+},{"../simple/test-fs-append-file":30,"../simple/test-fs-exists":31,"../simple/test-fs-mkdir":32,"../simple/test-fs-readdir":33,"../simple/test-fs-stat":34,"../simple/test-fs-write":37,"../simple/test-fs-write-buffer":35,"../simple/test-fs-write-file":36}],29:[function(require,module,exports){
 exports.tmpDir = '/'
 exports.error = function (msg) {
   console.log(msg)
 }
 exports.fixturesDir = '/'
 
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -6386,7 +6606,7 @@ fs.writeFile(filename3, currentFileData, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":26,"../common":28,"assert":1,"buffer":2,"path":9}],30:[function(require,module,exports){
+},{"../../chrome":27,"../common":29,"assert":1,"buffer":2,"path":10}],31:[function(require,module,exports){
 var fs = require('../../chrome')
 var assert = require('assert')
 var exists
@@ -6411,7 +6631,7 @@ fs.writeFile(f, 'Some lorum impsum', function () {
   })
 })
 
-},{"../../chrome":26,"assert":1}],31:[function(require,module,exports){
+},{"../../chrome":27,"assert":1}],32:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -6470,7 +6690,7 @@ fs.mkdir(pathname2, 511, function (err) {
   })
 })
 
-},{"../../chrome":26,"../common":28,"assert":1}],32:[function(require,module,exports){
+},{"../../chrome":27,"../common":29,"assert":1}],33:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -6541,7 +6761,7 @@ fs.mkdir(readdirDir2, function (err) {
   })
 })
 
-},{"../../chrome":26,"../common":28,"assert":1,"path":9}],33:[function(require,module,exports){
+},{"../../chrome":27,"../common":29,"assert":1,"path":10}],34:[function(require,module,exports){
 (function (global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -6667,7 +6887,7 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
 })
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../chrome":26,"assert":1}],34:[function(require,module,exports){
+},{"../../chrome":27,"assert":1}],35:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -6723,7 +6943,7 @@ fs.open(filename, 'w', '0644', function (err, fd) {
   })
 })
 
-},{"../../chrome":26,"../common":28,"assert":1,"buffer":2,"path":9}],35:[function(require,module,exports){
+},{"../../chrome":27,"../common":29,"assert":1,"buffer":2,"path":10}],36:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -6860,7 +7080,7 @@ fs.writeFile(filename3, n, { mode: m }, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":26,"../common":28,"assert":1,"buffer":2,"path":9}],36:[function(require,module,exports){
+},{"../../chrome":27,"../common":29,"assert":1,"buffer":2,"path":10}],37:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -6888,9 +7108,9 @@ var path = require('path')
 var Buffer = require('buffer').Buffer // eslint-disable-line
 var fs = require('../../chrome')
 var fn = path.join(common.tmpDir, 'write.txt')
-// var fn2 = path.join(common.tmpDir, 'write2.txt')
-var expected = 'ümlaut.' // eslint-disable-line
-// var constants = require('constants')
+var fn2 = path.join(common.tmpDir, 'write2.txt')
+var expected = 'ümlaut.' // eslint-disable-line 
+var constants = require('constants')
 
 fs.open(fn, 'w', '0644', function (err, fd) {
   assert.equal(err, null)
@@ -6905,41 +7125,40 @@ fs.open(fn, 'w', '0644', function (err, fd) {
       assert.equal(err, null)
       fs.readFile(fn, 'utf8', function (err, found) {
         assert.equal(err, null)
-        console.log('expected: "%s"', expected)
-        console.log('found: "%s"', found)
-       // assert.equal(expected, found, 'Umlaut test')
+        assert.equal(expected, found, 'Umlaut test')
         fs.unlink(fn, function (err) {
           assert.equal(err, null)
+          console.log('test-fs-write success 1')
         })
       })
     })
   })
 })
 
-/*
 fs.open(fn2, constants.O_CREAT | constants.O_WRONLY | constants.O_TRUNC, '0644',
 function (err, fd) {
-  if (err) throw err
+  console.log(err)
+  assert.equal(err, null)
   console.log('open done')
   fs.write(fd, '', 0, 'utf8', function (err, written) {
+    assert.equal(err, null)
     assert.equal(0, written)
   })
   fs.write(fd, expected, 0, 'utf8', function (err, written) {
-    console.log('write done')
-    if (err) throw err
+    assert.equal(err, null)
     assert.equal(Buffer.byteLength(expected), written)
-    fs.closeSync(fd)
-    found2 = fs.readFileSync(fn2, 'utf8')
-    console.log('expected: "%s"', expected)
-    console.log('found: "%s"', found2)
-    fs.unlinkSync(fn2)
+    fs.close(fd, function (err) {
+      assert.equal(err, null)
+      fs.readFile(fn2, 'utf8', function (err, found) {
+        assert.equal(err, null)
+        assert.equal(expected, found, 'Umlaut test')
+        fs.unlink(fn2, function (err) {
+          assert.equal(err, null)
+          console.log('test-fs-write success 2')
+        })
+      })
+    })
   })
 })
 
-process.on('exit', function () {
-  assert.equal(expected, found)
-  assert.equal(expected, found2)
-})
-*/
-
-},{"../../chrome":26,"../common":28,"assert":1,"buffer":2,"path":9}]},{},[27]);
+},{"../../chrome":27,"../common":29,"assert":1,"buffer":2,"constants":6,"path":10}]},{},[28]);

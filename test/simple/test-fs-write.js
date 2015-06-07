@@ -25,9 +25,9 @@ var path = require('path')
 var Buffer = require('buffer').Buffer // eslint-disable-line
 var fs = require('../../chrome')
 var fn = path.join(common.tmpDir, 'write.txt')
-// var fn2 = path.join(common.tmpDir, 'write2.txt')
-var expected = 'ümlaut.' // eslint-disable-line
-// var constants = require('constants')
+var fn2 = path.join(common.tmpDir, 'write2.txt')
+var expected = 'ümlaut.' // eslint-disable-line 
+var constants = require('constants')
 
 fs.open(fn, 'w', '0644', function (err, fd) {
   assert.equal(err, null)
@@ -42,39 +42,38 @@ fs.open(fn, 'w', '0644', function (err, fd) {
       assert.equal(err, null)
       fs.readFile(fn, 'utf8', function (err, found) {
         assert.equal(err, null)
-        console.log('expected: "%s"', expected)
-        console.log('found: "%s"', found)
-       // assert.equal(expected, found, 'Umlaut test')
+        assert.equal(expected, found, 'Umlaut test')
         fs.unlink(fn, function (err) {
           assert.equal(err, null)
+          console.log('test-fs-write success 1')
         })
       })
     })
   })
 })
 
-/*
 fs.open(fn2, constants.O_CREAT | constants.O_WRONLY | constants.O_TRUNC, '0644',
 function (err, fd) {
-  if (err) throw err
+  console.log(err)
+  assert.equal(err, null)
   console.log('open done')
   fs.write(fd, '', 0, 'utf8', function (err, written) {
+    assert.equal(err, null)
     assert.equal(0, written)
   })
   fs.write(fd, expected, 0, 'utf8', function (err, written) {
-    console.log('write done')
-    if (err) throw err
+    assert.equal(err, null)
     assert.equal(Buffer.byteLength(expected), written)
-    fs.closeSync(fd)
-    found2 = fs.readFileSync(fn2, 'utf8')
-    console.log('expected: "%s"', expected)
-    console.log('found: "%s"', found2)
-    fs.unlinkSync(fn2)
+    fs.close(fd, function (err) {
+      assert.equal(err, null)
+      fs.readFile(fn2, 'utf8', function (err, found) {
+        assert.equal(err, null)
+        assert.equal(expected, found, 'Umlaut test')
+        fs.unlink(fn2, function (err) {
+          assert.equal(err, null)
+          console.log('test-fs-write success 2')
+        })
+      })
+    })
   })
 })
-
-process.on('exit', function () {
-  assert.equal(expected, found)
-  assert.equal(expected, found2)
-})
-*/

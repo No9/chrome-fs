@@ -1,6 +1,7 @@
 var util = require('util')
 var Buffer = require('buffer').Buffer
 var Stream = require('stream').Stream
+var constants = require('constants')
 
 var Readable = Stream.Readable
 var Writable = Stream.Writable
@@ -9,6 +10,15 @@ var FILESYSTEM_DEFAULT_SIZE = 250 * 1024 * 1024	// 250MB
 var DEBUG = true
 var kMinPoolSpace = 128
 var pool
+
+var O_APPEND = constants.O_APPEND || 0
+var O_CREAT = constants.O_CREAT || 0
+var O_EXCL = constants.O_EXCL || 0
+var O_RDONLY = constants.O_RDONLY || 0
+var O_RDWR = constants.O_RDWR || 0
+var O_SYNC = constants.O_SYNC || 0
+var O_TRUNC = constants.O_TRUNC || 0
+var O_WRONLY = constants.O_WRONLY || 0
 
 window.requestFileSystem = window.requestFileSystem || window.webkitRequestFileSystem
 
@@ -339,6 +349,7 @@ exports.writeFile = function (path, data, options, cb) {
 
 exports.open = function (path, flags, mode, callback) {
   path = resolve(path)
+  flags = flagToString(flags)
   callback = makeCallback(arguments[arguments.length - 1])
   mode = modeNum(mode, 438 /*=0666*/)
 
@@ -347,7 +358,7 @@ exports.open = function (path, flags, mode, callback) {
         window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
         function (cfs) {
           var opts = {}
-          if (flags === 'w') {
+          if (flags.indexOf('w') > -1) {
             opts = {create: true}
           }
           cfs.root.getFile(
@@ -356,7 +367,7 @@ exports.open = function (path, flags, mode, callback) {
                 function (fileEntry) {
                   // if its a write then we get the file writer
                   // otherwise we get the file because 'standards'
-                  if (flags === 'w') {
+                  if (flags.indexOf('w') > -1) {
                     fileEntry.createWriter(function (fileWriter) {
                       fileWriter.fullPath = fileEntry.fullPath
                       callback(null, fileWriter)
@@ -891,3 +902,31 @@ WriteStream.prototype.close = ReadStream.prototype.close
 
 // There is no shutdown() for files.
 WriteStream.prototype.destroySoon = WriteStream.prototype.end
+
+function flagToString (flag) {
+  // Only mess with strings
+  if (util.isString(flag)) {
+    return flag
+  }
+
+  switch (flag) {
+    case O_RDONLY : return 'r'
+    case O_RDONLY | O_SYNC : return 'sr'
+    case O_RDWR : return 'r+'
+    case O_RDWR | O_SYNC : return 'sr+'
+
+    case O_TRUNC | O_CREAT | O_WRONLY : return 'w'
+    case O_TRUNC | O_CREAT | O_WRONLY | O_EXCL : return 'xw'
+
+    case O_TRUNC | O_CREAT | O_RDWR : return 'w+'
+    case O_TRUNC | O_CREAT | O_RDWR | O_EXCL : return 'xw+'
+
+    case O_APPEND | O_CREAT | O_WRONLY : return 'a'
+    case O_APPEND | O_CREAT | O_WRONLY | O_EXCL : return 'xa'
+
+    case O_APPEND | O_CREAT | O_RDWR : return 'a+'
+    case O_APPEND | O_CREAT | O_RDWR | O_EXCL : return 'xa+'
+  }
+
+  throw new Error('Unknown file open flag: ' + flag)
+}
