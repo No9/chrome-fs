@@ -7,5 +7,8 @@ require('../simple/test-fs-readdir')
 require('../simple/test-fs-write')
 require('../simple/test-fs-write-buffer')
 require('../simple/test-fs-write-stream')
+
+// require('../simple/test-fs-read')
+// require('../simple/test-fs-read-buffer')
 // require('../simple/test-fs-empty-readStream')
 // require('../simple/test-fs-read-stream-fd')
