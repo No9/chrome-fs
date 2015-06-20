@@ -35,18 +35,13 @@ fs.writeFile(emptyFile, '', function (e) {
     assert.ifError(error)
 
     var read = fs.createReadStream(emptyFile, { 'fd': fd })
-    console.log(read)
     read.once('data', function () {
       throw new Error('data event should not emit')
     })
 
-    var readEmit = false
     read.once('end', function () {
-      readEmit = true
-      console.error('end event 1')
+      console.log('end event 1')
     })
-
-    setTimeout(assert.equal, 100, readEmit, true)
   })
 
   fs.open(emptyFile, 'r', function (error, fd) {
@@ -62,7 +57,7 @@ fs.writeFile(emptyFile, '', function (e) {
     var readEmit = false
     read.once('end', function () {
       readEmit = true
-      console.error('end event 2')
+      console.log('end event 2')
     })
     read.close(function () {
       fs.unlink(emptyFile, function (err) {

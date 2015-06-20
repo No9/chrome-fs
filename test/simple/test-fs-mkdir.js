@@ -36,7 +36,7 @@ fs.mkdir(pathname, function (err) {
     ncalls++
     assert.equal(ncalls, 2)
     fs.rmdir(pathname, function () {
-      console.log('mkdir 1 success')
+      console.log('test-fs-mkdir 1 success')
     })
   })
 })
@@ -51,7 +51,7 @@ fs.mkdir(pathname2, 511, function (err) {
     ncalls2++
     fs.rmdir(pathname2, function () {
       assert(ncalls2, 2)
-      console.log('mkdir 2 success')
+      console.log('test-fs-mkdir 2 success')
     })
   })
 })

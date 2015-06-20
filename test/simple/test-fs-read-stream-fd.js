@@ -50,7 +50,6 @@ fs.writeFile(file, input, function (e) {
         console.log('test-fs-read-stream-fd success')
       })
       assert.equal(output, input)
-
     })
   })
 })

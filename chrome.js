@@ -8,8 +8,6 @@ var Writable = Stream.Writable
 
 var FILESYSTEM_DEFAULT_SIZE = 250 * 1024 * 1024	// 250MB
 var DEBUG = true
-var kMinPoolSpace = 128
-var pool
 
 var O_APPEND = constants.O_APPEND || 0
 var O_CREAT = constants.O_CREAT || 0
@@ -21,11 +19,6 @@ var O_TRUNC = constants.O_TRUNC || 0
 var O_WRONLY = constants.O_WRONLY || 0
 
 window.requestFileSystem = window.requestFileSystem || window.webkitRequestFileSystem
-
-function allocNewPool (poolSize) {
-  pool = new Buffer(poolSize)
-  pool.used = 0
-}
 
 function nullCheck (path, callback) {
   if (('' + path).indexOf('\u0000') !== -1) {
@@ -76,6 +69,11 @@ function rethrow () {
 }
 
 function resolve (path) {
+  // Allow null pass through
+  if (path === null) {
+    return null
+  }
+  // Don't let anything but strings be passed as on
   if (typeof path !== 'string') {
     throw Error('Cannot resolve: Paths must be strings')
   }
@@ -684,8 +682,8 @@ function ReadStream (path, options) {
   this.flags = options.hasOwnProperty('flags') ? options.flags : 'r'
   this.mode = options.hasOwnProperty('mode') ? options.mode : 438 /*=0666*/
 
-  this.start = options.hasOwnProperty('start') ? options.start : undefined
-  this.end = options.hasOwnProperty('end') ? options.end : undefined
+  this.start = options.hasOwnProperty('start') ? options.start : 0
+  this.end = options.hasOwnProperty('end') ? options.end : 0
   this.autoClose = options.hasOwnProperty('autoClose') ?
       options.autoClose : true
   this.pos = undefined
@@ -706,10 +704,10 @@ function ReadStream (path, options) {
 
     this.pos = this.start
   }
-
+  /*
   if (!util.isNumber(this.fd)) {
     this.open()
-  }
+  }*/
   this.on('end', function () {
     if (this.autoClose) {
       this.destroy()
@@ -733,68 +731,44 @@ ReadStream.prototype.open = function () {
     self.fd = fd
     self.emit('open', fd)
     // start the flow of data.
-    debugger // eslint-disable-line
+    // debugger // eslint-disable-line
     self.read()
   })
 }
 
 ReadStream.prototype._read = function (n) {
-  if (!util.isNumber(this.fd)) {
-    return this.once('open', function () {
-      this._read(n)
-    })
-  }
-
   if (this.destroyed) {
     return
   }
 
-  if (!pool || pool.length - pool.used < kMinPoolSpace) {
-    // discard the old pool.
-    pool = null
-    allocNewPool(this._readableState.highWaterMark)
+  if (this.ispaused) {
+    return
   }
 
-  // Grab another reference to the pool in the case that while we're
-  // in the thread pool another read() finishes up the pool, and
-  // allocates a new one.
-  var thisPool = pool
-  var toRead = Math.min(pool.length - pool.used, n)
-  var start = pool.used
-
-  if (!util.isUndefined(this.pos)) {
-    toRead = Math.min(this.end - this.pos + 1, toRead)
-  }
-
-  // already read everything we were supposed to read!
-  // treat as EOF.
-  if (toRead <= 0) {
+  if (this.pos === this.fd.size) {
     return this.push(null)
   }
-  // the actual read.
-  var self = this
-  exports.read(this.fd, pool, pool.used, toRead, this.pos, onread)
-
-  // move the pool positions, and internal position for reading.
-  if (!util.isUndefined(this.pos)) {
-    this.pos += toRead
+  this.pos = this.fd.size
+  if (this.fd.size === 0) {
+    return this.push(null)
   }
-  pool.used += toRead
-
-  function onread (er, bytesRead) {
-    if (er) {
+  var self = this
+  // Sketchy implementation that pushes the whole file to the the stream
+  // But maybe fd has a size that we can iterate to?
+  var onread = function (err, length, data) {
+    if (err) {
       if (self.autoClose) {
         self.destroy()
       }
-      self.emit('error', er)
-    } else {
-      var b = null
-      if (bytesRead > 0) {
-        b = thisPool.slice(start, start + bytesRead)
-      }
-      self.push(b)
+      self.emit('error', err)
     }
+    self.push(data)
+    self.destroy()
+
   }
+
+  exports.read(this.fd, new Buffer(this.fd.size), 0, this.fd.size, 0, onread)
+
 }
 
 ReadStream.prototype.destroy = function () {
@@ -803,35 +777,22 @@ ReadStream.prototype.destroy = function () {
   }
 
   this.destroyed = true
-
-  if (util.isNumber(this.fd)) {
-    this.close()
-  }
+  this.close()
 }
 
 ReadStream.prototype.close = function (cb) {
   var self = this
+
   if (cb) {
     this.once('close', cb)
   }
-  if (this.closed || !util.isNumber(this.fd)) {
-    if (!util.isNumber(this.fd)) {
-      this.once('open', close)
-      return
-    }
-    return process.nextTick(this.emit.bind(this, 'close'))
+  if (this.closed) {
+    this.emit('close')
   }
   this.closed = true
   close()
-
   function close (fd) {
-    exports.close(fd || self.fd, function (er) {
-      if (er) {
-        self.emit('error', er)
-      } else {
-        self.emit('close')
-      }
-    })
+    self.emit('close')
     self.fd = null
   }
 }
@@ -871,10 +832,11 @@ function WriteStream (path, options) {
 
     this.pos = this.start
   }
-
+  /*
   if (!util.isNumber(this.fd)) {
     this.open()
   }
+  */
   // dispose on finish.
   this.once('finish', this.close)
 }
