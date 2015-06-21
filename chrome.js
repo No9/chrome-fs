@@ -333,21 +333,6 @@ exports.fstat = function (fd, callback) {
   this.stat(fd.filePath, callback)
 }
 
-exports.writeFile = function (path, data, options, cb) {
-  var callback = maybeCallback(arguments[arguments.length - 1])
-
-  if (util.isFunction(options) || !options) {
-    options = { encoding: 'utf8', mode: 438, flag: 'w' }  /*=0666*/
-  } else if (util.isString(options)) {
-    options = { encoding: options, mode: 438, flag: 'w' }
-  } else if (!util.isObject(options)) {
-    throw new TypeError('Bad arguments')
-  }
-
-  assertEncoding(options.encoding)
-  callback()
-}
-
 exports.open = function (path, flags, mode, callback) {
   path = resolve(path)
   flags = flagToString(flags)
@@ -392,6 +377,10 @@ exports.open = function (path, flags, mode, callback) {
 }
 
 exports.read = function (fd, buffer, offset, length, position, callback) {
+  if (fd === null) {
+    callback(null, 0, '')
+    return
+  }
   if (!util.isBuffer(buffer)) {
     // fs.read(fd, expected.length, 0, 'utf-8', function (err, str, bytesRead)
     // legacy string interface (fd, length, position, encoding, callback)
@@ -670,6 +659,7 @@ function ReadStream (path, options) {
   if (!(this instanceof ReadStream)) {
     return new ReadStream(path, options)
   }
+  // debugger // eslint-disable-line
   // a little bit bigger buffer and water marks by default
   options = util._extend({
     highWaterMark: 64 * 1024
@@ -704,10 +694,13 @@ function ReadStream (path, options) {
 
     this.pos = this.start
   }
-  /*
-  if (!util.isNumber(this.fd)) {
+  if (this.fd === null) {
+    this.pause()
+  }
+
+  if (this.path !== null) {
     this.open()
-  }*/
+  }
   this.on('end', function () {
     if (this.autoClose) {
       this.destroy()
@@ -719,6 +712,11 @@ exports.FileReadStream = exports.ReadStream // support the legacy name
 
 ReadStream.prototype.open = function () {
   var self = this
+
+  if (this.flags === null) {
+    this.flags = 'r'
+  }
+
   exports.open(this.path, this.flags, this.mode, function (er, fd) {
     if (er) {
       if (self.autoClose) {
@@ -727,16 +725,19 @@ ReadStream.prototype.open = function () {
       self.emit('error', er)
       return
     }
-
+    self.resume()
     self.fd = fd
     self.emit('open', fd)
-    // start the flow of data.
-    // debugger // eslint-disable-line
     self.read()
   })
 }
 
 ReadStream.prototype._read = function (n) {
+  if (this.fd === null) {
+    return this.once('open', function () {
+      this._read(n)
+    })
+  }
   if (this.destroyed) {
     return
   }
@@ -752,6 +753,7 @@ ReadStream.prototype._read = function (n) {
   if (this.fd.size === 0) {
     return this.push(null)
   }
+
   var self = this
   // Sketchy implementation that pushes the whole file to the the stream
   // But maybe fd has a size that we can iterate to?
@@ -763,8 +765,6 @@ ReadStream.prototype._read = function (n) {
       self.emit('error', err)
     }
     self.push(data)
-    self.destroy()
-
   }
 
   exports.read(this.fd, new Buffer(this.fd.size), 0, this.fd.size, 0, onread)

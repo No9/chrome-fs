@@ -6062,21 +6062,6 @@ exports.fstat = function (fd, callback) {
   this.stat(fd.filePath, callback)
 }
 
-exports.writeFile = function (path, data, options, cb) {
-  var callback = maybeCallback(arguments[arguments.length - 1])
-
-  if (util.isFunction(options) || !options) {
-    options = { encoding: 'utf8', mode: 438, flag: 'w' }  /*=0666*/
-  } else if (util.isString(options)) {
-    options = { encoding: options, mode: 438, flag: 'w' }
-  } else if (!util.isObject(options)) {
-    throw new TypeError('Bad arguments')
-  }
-
-  assertEncoding(options.encoding)
-  callback()
-}
-
 exports.open = function (path, flags, mode, callback) {
   path = resolve(path)
   flags = flagToString(flags)
@@ -6121,6 +6106,10 @@ exports.open = function (path, flags, mode, callback) {
 }
 
 exports.read = function (fd, buffer, offset, length, position, callback) {
+  if (fd === null) {
+    callback(null, 0, '')
+    return
+  }
   if (!util.isBuffer(buffer)) {
     // fs.read(fd, expected.length, 0, 'utf-8', function (err, str, bytesRead)
     // legacy string interface (fd, length, position, encoding, callback)
@@ -6399,6 +6388,7 @@ function ReadStream (path, options) {
   if (!(this instanceof ReadStream)) {
     return new ReadStream(path, options)
   }
+  // debugger // eslint-disable-line
   // a little bit bigger buffer and water marks by default
   options = util._extend({
     highWaterMark: 64 * 1024
@@ -6433,10 +6423,13 @@ function ReadStream (path, options) {
 
     this.pos = this.start
   }
-  /*
-  if (!util.isNumber(this.fd)) {
+  if (this.fd === null) {
+    this.pause()
+  }
+
+  if (this.path !== null) {
     this.open()
-  }*/
+  }
   this.on('end', function () {
     if (this.autoClose) {
       this.destroy()
@@ -6448,6 +6441,11 @@ exports.FileReadStream = exports.ReadStream // support the legacy name
 
 ReadStream.prototype.open = function () {
   var self = this
+
+  if (this.flags === null) {
+    this.flags = 'r'
+  }
+
   exports.open(this.path, this.flags, this.mode, function (er, fd) {
     if (er) {
       if (self.autoClose) {
@@ -6456,16 +6454,19 @@ ReadStream.prototype.open = function () {
       self.emit('error', er)
       return
     }
-
+    self.resume()
     self.fd = fd
     self.emit('open', fd)
-    // start the flow of data.
-    // debugger // eslint-disable-line
     self.read()
   })
 }
 
 ReadStream.prototype._read = function (n) {
+  if (this.fd === null) {
+    return this.once('open', function () {
+      this._read(n)
+    })
+  }
   if (this.destroyed) {
     return
   }
@@ -6481,6 +6482,7 @@ ReadStream.prototype._read = function (n) {
   if (this.fd.size === 0) {
     return this.push(null)
   }
+
   var self = this
   // Sketchy implementation that pushes the whole file to the the stream
   // But maybe fd has a size that we can iterate to?
@@ -6492,8 +6494,6 @@ ReadStream.prototype._read = function (n) {
       self.emit('error', err)
     }
     self.push(data)
-    self.destroy()
-
   }
 
   exports.read(this.fd, new Buffer(this.fd.size), 0, this.fd.size, 0, onread)
@@ -6656,10 +6656,11 @@ require('../simple/test-fs-write-buffer')
 require('../simple/test-fs-read')
 require('../simple/test-fs-read-buffer')
 require('../simple/test-fs-read-stream-fd')
-require('../simple/test-fs-write-stream')
-require('../simple/test-fs-empty-readStream')
+require('../simple/test-fs-read-stream')
+require('../simple/test-fs-empty-read-stream')
+// require('../simple/test-fs-write-stream')
 
-},{"../simple/test-fs-append-file":31,"../simple/test-fs-empty-readStream":32,"../simple/test-fs-exists":33,"../simple/test-fs-mkdir":34,"../simple/test-fs-read":37,"../simple/test-fs-read-buffer":35,"../simple/test-fs-read-stream-fd":36,"../simple/test-fs-readdir":38,"../simple/test-fs-stat":39,"../simple/test-fs-write":43,"../simple/test-fs-write-buffer":40,"../simple/test-fs-write-file":41,"../simple/test-fs-write-stream":42}],30:[function(require,module,exports){
+},{"../simple/test-fs-append-file":31,"../simple/test-fs-empty-read-stream":32,"../simple/test-fs-exists":33,"../simple/test-fs-mkdir":34,"../simple/test-fs-read":38,"../simple/test-fs-read-buffer":35,"../simple/test-fs-read-stream":37,"../simple/test-fs-read-stream-fd":36,"../simple/test-fs-readdir":39,"../simple/test-fs-stat":40,"../simple/test-fs-write":43,"../simple/test-fs-write-buffer":41,"../simple/test-fs-write-file":42}],30:[function(require,module,exports){
 exports.tmpDir = '/'
 exports.error = function (msg) {
   console.log(msg)
@@ -7067,6 +7068,223 @@ fs.writeFile(file, input, function (e) {
 
 var common = require('../common')
 var assert = require('assert')
+
+// TODO Improved this test. test_ca.pem is too small. A proper test would
+// great a large utf8 (with multibyte chars) file and stream it in,
+// performing sanity checks throughout.
+
+var path = require('path')
+var fs = require('../../chrome')
+var fn = path.join(common.fixturesDir, 'x-stream.txt')
+var rangeFile = path.join(common.fixturesDir, 'elipses.txt')
+
+var elipses = '\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026'
+
+var x = 'xyz'
+var callbacks = { open: 0, end: 0, close: 0 }
+var paused = false
+
+fs.writeFile(fn, x, function (err) {
+  assert.equal(err, null)
+  // var ncallbacks1 = 1
+
+  var file = fs.ReadStream(fn)
+  file.on('open', function (fd) {
+    file.length = 0
+    callbacks.open++
+    assert.equal('object', typeof fd)
+    assert.ok(file.readable)
+    // GH-535
+    file.pause()
+    file.resume()
+    file.pause()
+    file.resume()
+  })
+
+  file.on('data', function (data) {
+    assert.ok(data instanceof Object)
+    assert.ok(!paused)
+    file.length += data.length
+    paused = true
+    file.pause()
+
+    setTimeout(function () {
+      paused = false
+      file.resume()
+    }, 10)
+  })
+
+  file.on('end', function (chunk) {
+    callbacks.end++
+  })
+
+  file.on('close', function () {
+    callbacks.close++
+    fs.unlink(fn, function (err) {
+      if (err) {
+        assert.fail(err)
+      }
+      console.log('test-fs-read-stream 1 success')
+    })
+  })
+  /*
+  process.on('exit', function () {
+    assert.equal(1, callbacks.open)
+    assert.equal(1, callbacks.end)
+    assert.equal(2, callbacks.close)
+    assert.equal(30000, file.length)
+    assert.equal(10000, file3.length)
+    console.error('ok')
+  })*/
+})
+
+fs.writeFile(rangeFile, elipses, function (e) {
+  if (e) {
+    console.log(e)
+    throw e
+  }
+  var file3 = fs.createReadStream(rangeFile, {encoding: 'utf8'})
+  file3.length = 0
+  file3.on('data', function (data) {
+    // assert.equal('string', typeof (data))
+    file3.length += data.length
+
+    for (var i = 0; i < data.length; i++) {
+      // http://www.fileformat.info/info/unicode/char/2026/index.htm
+      assert.equal('\u2026', data[i])
+    }
+  })
+
+  file3.on('close', function () {
+    callbacks.close++
+    fs.unlink(rangeFile, function (err) {
+      if (err) {
+        assert.fail(err)
+      }
+      // assert.equal(2, ncallbacks1, 'test-fs-write-file-1')
+      console.log('test-fs-read-stream-2')
+    })
+  })
+})
+/*
+var file4 = fs.createReadStream(rangeFile, {bufferSize: 1, start: 1, end: 2})
+var contentRead = ''
+file4.on('data', function (data) {
+  contentRead += data.toString('utf-8')
+})
+file4.on('end', function (data) {
+  assert.equal(contentRead, 'yz')
+})
+
+var file5 = fs.createReadStream(rangeFile, {bufferSize: 1, start: 1})
+file5.data = ''
+file5.on('data', function (data) {
+  file5.data += data.toString('utf-8')
+})
+file5.on('end', function () {
+  assert.equal(file5.data, 'yz\n')
+})
+
+// https://github.com/joyent/node/issues/2320
+var file6 = fs.createReadStream(rangeFile, {bufferSize: 1.23, start: 1})
+file6.data = ''
+file6.on('data', function (data) {
+  file6.data += data.toString('utf-8')
+})
+file6.on('end', function () {
+  assert.equal(file6.data, 'yz\n')
+})
+
+assert.throws(function () {
+  fs.createReadStream(rangeFile, {start: 10, end: 2})
+}, /start must be <= end/)
+
+var stream = fs.createReadStream(rangeFile, { start: 0, end: 0 })
+stream.data = ''
+
+stream.on('data', function (chunk) {
+  stream.data += chunk
+})
+
+stream.on('end', function () {
+  assert.equal('x', stream.data)
+})
+
+// pause and then resume immediately.
+var pauseRes = fs.createReadStream(rangeFile)
+pauseRes.pause()
+pauseRes.resume()
+
+var file7 = fs.createReadStream(rangeFile, {autoClose: false })
+file7.on('data', function () {})
+file7.on('end', function () {
+  process.nextTick(function () {
+    assert(!file7.closed)
+    assert(!file7.destroyed)
+    file7Next()
+  })
+})
+
+function file7Next () {
+  // This will tell us if the fd is usable again or not.
+  file7 = fs.createReadStream(null, {fd: file7.fd, start: 0 })
+  file7.data = ''
+  file7.on('data', function (data) {
+    file7.data += data
+  })
+  file7.on('end', function (err) {
+    assert.equal(err, null)
+    assert.equal(file7.data, 'xyz\n')
+  })
+}
+
+// Just to make sure autoClose won't close the stream because of error.
+var file8 = fs.createReadStream(null, {fd: 13337, autoClose: false })
+file8.on('data', function () {})
+file8.on('error', common.mustCall(function () {}))
+
+// Make sure stream is destroyed when file does not exist.
+var file9 = fs.createReadStream('/path/to/file/that/does/not/exist')
+file9.on('data', function () {})
+file9.on('error', common.mustCall(function () {}))
+
+process.on('exit', function () {
+  assert(file7.closed)
+  assert(file7.destroyed)
+
+  assert(!file8.closed)
+  assert(!file8.destroyed)
+  assert(file8.fd)
+
+  assert(!file9.closed)
+  assert(file9.destroyed)
+})
+*/
+
+},{"../../chrome":28,"../common":30,"assert":1,"path":11}],38:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
 var path = require('path')
 var fs = require('../../chrome')
 var filepath = path.join(common.tmpDir, 'x.txt')
@@ -7089,7 +7307,7 @@ fs.writeFile(filepath, expected, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":30,"assert":1,"path":11}],38:[function(require,module,exports){
+},{"../../chrome":28,"../common":30,"assert":1,"path":11}],39:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -7160,7 +7378,7 @@ fs.mkdir(readdirDir2, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":30,"assert":1,"path":11}],39:[function(require,module,exports){
+},{"../../chrome":28,"../common":30,"assert":1,"path":11}],40:[function(require,module,exports){
 (function (global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -7286,7 +7504,7 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
 })
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../chrome":28,"assert":1}],40:[function(require,module,exports){
+},{"../../chrome":28,"assert":1}],41:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -7342,7 +7560,7 @@ fs.open(filename, 'w', '0644', function (err, fd) {
   })
 })
 
-},{"../../chrome":28,"../common":30,"assert":1,"buffer":3,"path":11}],41:[function(require,module,exports){
+},{"../../chrome":28,"../common":30,"assert":1,"buffer":3,"path":11}],42:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -7479,97 +7697,7 @@ fs.writeFile(filename3, n, { mode: m }, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"../common":30,"assert":1,"buffer":3,"path":11}],42:[function(require,module,exports){
-// Copyright Joyent, Inc. and other Node contributors.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to permit
-// persons to whom the Software is furnished to do so, subject to the
-// following conditions:
-//
-// The above copyright notice and this permission notice shall be included
-// in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-// USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-var common = require('../common')
-var assert = require('assert')
-
-var path = require('path')
-var fs = require('../../chrome')
-var fn = path.join(common.tmpDir, 'write.txt')
-var file = fs.createWriteStream(fn, {
-      highWaterMark: 10
-    })
-
-var EXPECTED = '012345678910'
-
-var callbacks = {
-      open: -1,
-      drain: -2,
-      close: -1
-    }
-
-file
-  .on('open', function (fd) {
-      console.log('open!')
-      callbacks.open++
-      // Ignoring as this fd is a shim onto the Web FS API
-      // assert.equal('number', typeof fd)
-    })
-  .on('error', function (err) {
-      assert.equal(err, null)
-    })
-  .on('drain', function () {
-      console.error('drain!', callbacks.drain)
-      callbacks.drain++
-      if (callbacks.drain === -1) {
-        assert.equal(EXPECTED, fs.readFileSync(fn, 'utf8'))
-        file.write(EXPECTED)
-      } else if (callbacks.drain === 0) {
-        assert.equal(EXPECTED + EXPECTED, fs.readFileSync(fn, 'utf8'))
-        file.end()
-      }
-    })
-  .on('close', function () {
-      console.error('close!')
-      assert.strictEqual(file.bytesWritten, EXPECTED.length * 2)
-
-      callbacks.close++
-      assert.throws(function () {
-        console.error('write after end should not be allowed')
-        file.write('should not work anymore')
-      })
-      for (var k in callbacks) {
-        assert.equal(0, callbacks[k], k + ' count off by ' + callbacks[k])
-      }
-      fs.unlinkSync(fn)
-    })
-
-for (var i = 0; i < 11; i++) {
-  (function (i) {
-    file.write('' + i)
-  })(i)
-}
-/*
-process.on('exit', function () {
-  for (var k in callbacks) {
-    assert.equal(0, callbacks[k], k + ' count off by ' + callbacks[k])
-  }
-  console.log('ok')
-})
-*/
-
-},{"../../chrome":28,"../common":30,"assert":1,"path":11}],43:[function(require,module,exports){
+},{"../../chrome":28,"../common":30,"assert":1,"buffer":3,"path":11}],43:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
