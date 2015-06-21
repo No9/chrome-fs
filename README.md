@@ -58,9 +58,9 @@ Sync apis won't be supported they are listed here https://github.com/No9/chrome-
 - [ ] Stat Time Values
 
 #### Class: - fs.ReadStream 
-- [ ] fs.ReadStream
-- [ ] Event: 'open'
-- [ ] fs.createWriteStream(path[, options])
+- [x] fs.ReadStream
+- [x] Event: 'open'
+- [x] fs.createWriteStream(path[, options])
 
 #### Class: - fs.WriteStream 
 - [ ] fs.WriteStream
