@@ -114,8 +114,7 @@ fs.writeFile(rangeFile, elipses, function (e) {
       if (err) {
         assert.fail(err)
       }
-      // assert.equal(2, ncallbacks1, 'test-fs-write-file-1')
-      console.log('test-fs-read-stream-2')
+      console.log('test-fs-read-stream-2 success')
     })
   })
 })

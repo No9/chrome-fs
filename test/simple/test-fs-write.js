@@ -55,7 +55,6 @@ fs.open(fn, 'w', '0644', function (err, fd) {
 fs.open(fn2, constants.O_CREAT | constants.O_WRONLY | constants.O_TRUNC, '0644',
 function (err, fd) {
   assert.equal(err, null)
-  console.log('open done')
   fs.write(fd, '', 0, 'utf8', function (err, written) {
     assert.equal(err, null)
     assert.equal(0, written)

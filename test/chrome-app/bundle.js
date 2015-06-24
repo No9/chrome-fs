@@ -6212,8 +6212,8 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
     var bufblob = new Blob([tmpbuf], {type: 'application/octet-binary'}) // eslint-disable-line
     if (fd.readyState > 0) {
       fd.onwriteend = function () {
-        fd.write(blob)
-        callback(null, buf.length)
+        fd.write(bufblob)
+        callback(null, tmpbuf.length)
       }
     } else {
       fd.write(bufblob)
@@ -6561,11 +6561,11 @@ function WriteStream (path, options) {
 
     this.pos = this.start
   }
-  /*
-  if (!util.isNumber(this.fd)) {
+
+  if (this.fd === null) {
     this.open()
   }
-  */
+
   // dispose on finish.
   this.once('finish', this.close)
 }
@@ -6589,10 +6589,18 @@ WriteStream.prototype._write = function (data, encoding, cb) {
   if (!util.isBuffer(data)) {
     return this.emit('error', new Error('Invalid data'))
   }
-  if (!util.isNumber(this.fd)) {
+  if (!util.isObject(this.fd)) {
     return this.once('open', function () {
       this._write(data, encoding, cb)
     })
+  }
+  if (typeof cb === 'function') {
+    cb = function (err) {
+      if (err) {
+        console.log(err)
+        this.emit('error', err)
+      }
+    }
   }
   var self = this
   exports.write(this.fd, data, 0, data.length, this.pos, function (er, bytes) {
@@ -6603,7 +6611,6 @@ WriteStream.prototype._write = function (data, encoding, cb) {
     self.bytesWritten += bytes
     cb()
   })
-
   if (!util.isUndefined(this.pos)) {
     this.pos += data.length
   }
@@ -7161,8 +7168,7 @@ fs.writeFile(rangeFile, elipses, function (e) {
       if (err) {
         assert.fail(err)
       }
-      // assert.equal(2, ncallbacks1, 'test-fs-write-file-1')
-      console.log('test-fs-read-stream-2')
+      console.log('test-fs-read-stream-2 success')
     })
   })
 })
@@ -7755,7 +7761,6 @@ fs.open(fn, 'w', '0644', function (err, fd) {
 fs.open(fn2, constants.O_CREAT | constants.O_WRONLY | constants.O_TRUNC, '0644',
 function (err, fd) {
   assert.equal(err, null)
-  console.log('open done')
   fs.write(fd, '', 0, 'utf8', function (err, written) {
     assert.equal(err, null)
     assert.equal(0, written)
