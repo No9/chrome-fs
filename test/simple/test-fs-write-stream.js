@@ -80,8 +80,7 @@ for (var i = 0; i < 11; i++) {
     file.write('' + i)
   })(i)
 }
-/*
-process.on('exit', function () {
+/* process.on('exit', function () {
   for (var k in callbacks) {
     assert.equal(0, callbacks[k], k + ' count off by ' + callbacks[k])
   }

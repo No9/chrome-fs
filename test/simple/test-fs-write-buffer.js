@@ -21,13 +21,13 @@
 
 var common = require('../common')
 var assert = require('assert')
-var path = require('path'),
-    Buffer = require('buffer').Buffer,
-    fs = require('../../chrome'),
-    filename = path.join(common.tmpDir, 'writebuffer.txt'),
-    expected = new Buffer('hello buffer'),
-    openCalled = 0,
-    writeCalled = 0
+var path = require('path')
+var Buffer = require('buffer').Buffer
+var fs = require('../../chrome')
+var filename = path.join(common.tmpDir, 'writebuffer.txt')
+var expected = new Buffer('hello buffer')
+var openCalled = 0
+var writeCalled = 0
 
 fs.open(filename, 'w', '0644', function (err, fd) {
   openCalled++

@@ -80,15 +80,14 @@ fs.writeFile(fn, x, function (err) {
       console.log('test-fs-read-stream 1 success')
     })
   })
-  /*
-  process.on('exit', function () {
+  /* process.on('exit', function () {
     assert.equal(1, callbacks.open)
     assert.equal(1, callbacks.end)
     assert.equal(2, callbacks.close)
     assert.equal(30000, file.length)
     assert.equal(10000, file3.length)
     console.error('ok')
-  })*/
+  }) */
 })
 
 fs.writeFile(rangeFile, elipses, function (e) {
@@ -118,8 +117,7 @@ fs.writeFile(rangeFile, elipses, function (e) {
     })
   })
 })
-/*
-var file4 = fs.createReadStream(rangeFile, {bufferSize: 1, start: 1, end: 2})
+/* var file4 = fs.createReadStream(rangeFile, {bufferSize: 1, start: 1, end: 2})
 var contentRead = ''
 file4.on('data', function (data) {
   contentRead += data.toString('utf-8')
@@ -211,4 +209,4 @@ process.on('exit', function () {
   assert(!file9.closed)
   assert(file9.destroyed)
 })
-*/
+ */

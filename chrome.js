@@ -337,7 +337,7 @@ exports.open = function (path, flags, mode, callback) {
   path = resolve(path)
   flags = flagToString(flags)
   callback = makeCallback(arguments[arguments.length - 1])
-  mode = modeNum(mode, 438 /*=0666*/)
+  mode = modeNum(mode, 438 /* =0666 */)
 
   if (!nullCheck(path, callback)) return
   window.requestFileSystem(
@@ -670,7 +670,7 @@ function ReadStream (path, options) {
   this.path = path
   this.fd = options.hasOwnProperty('fd') ? options.fd : null
   this.flags = options.hasOwnProperty('flags') ? options.flags : 'r'
-  this.mode = options.hasOwnProperty('mode') ? options.mode : 438 /*=0666*/
+  this.mode = options.hasOwnProperty('mode') ? options.mode : 438 /* =0666 */
 
   this.start = options.hasOwnProperty('start') ? options.start : 0
   this.end = options.hasOwnProperty('end') ? options.end : 0
@@ -816,7 +816,7 @@ function WriteStream (path, options) {
 
   this.fd = options.hasOwnProperty('fd') ? options.fd : null
   this.flags = options.hasOwnProperty('flags') ? options.flags : 'w'
-  this.mode = options.hasOwnProperty('mode') ? options.mode : 438 /*=0666*/
+  this.mode = options.hasOwnProperty('mode') ? options.mode : 438 /* =0666 */
 
   this.start = options.hasOwnProperty('start') ? options.start : undefined
   this.pos = undefined
