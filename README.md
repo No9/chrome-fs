@@ -63,9 +63,9 @@ Sync apis won't be supported they are listed here https://github.com/No9/chrome-
 - [x] fs.createWriteStream(path[, options])
 
 #### Class: - fs.WriteStream 
-- [ ] fs.WriteStream
-- [ ] Event: 'open'
-- [ ] file.bytesWritten
+- [x] fs.WriteStream
+- [x] Event: 'open'
+- [x] file.bytesWritten
 
 #### Class: - fs.FSWatcher 
 - [ ] fs.FSWatcher

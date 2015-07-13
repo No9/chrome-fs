@@ -7,7 +7,7 @@ var Readable = Stream.Readable
 var Writable = Stream.Writable
 
 var FILESYSTEM_DEFAULT_SIZE = 250 * 1024 * 1024	// 250MB
-var DEBUG = true
+var DEBUG = false
 
 var O_APPEND = constants.O_APPEND || 0
 var O_CREAT = constants.O_CREAT || 0
@@ -478,17 +478,23 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
       position = null
     }
     callback = maybeCallback(callback)
+
     fd.onerror = callback
+    fd.onprogress = function () {}
     var tmpbuf = buffer.slice(offset, length)
     var bufblob = new Blob([tmpbuf], {type: 'application/octet-binary'}) // eslint-disable-line
     if (fd.readyState > 0) {
+      // when the ready state is greater than 1 we have to wait until the write end has finished
+      // but this causes the stream to keep sending write events.
       fd.onwriteend = function () {
         fd.write(bufblob)
-        callback(null, tmpbuf.length)
       }
+      callback(null, tmpbuf.length)
     } else {
       fd.write(bufblob)
-      callback(null, tmpbuf.length)
+      if (typeof callback === 'function') {
+        callback(null, tmpbuf.length)
+      }
     }
   } else {
     if (util.isString(buffer)) {
@@ -515,14 +521,18 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
           fd.seek(position)
         }
         fd.write(blob)
-        callback(null, buf.length)
+        if (typeof callback === 'function') {
+          callback(null, buf.length)
+        }
       }
     } else {
       if (position !== null) {
         fd.seek(position)
       }
       fd.write(blob)
-      callback(null, buf.length)
+      if (typeof callback === 'function') {
+        callback(null, buf.length)
+      }
     }
   }
 }
@@ -850,40 +860,49 @@ WriteStream.prototype.open = function () {
       this.emit('error', er)
       return
     }
-
     this.fd = fd
     this.emit('open', fd)
   }.bind(this))
 }
 
-WriteStream.prototype._write = function (data, encoding, cb) {
+WriteStream.prototype._write = function (data, encoding, callbk) {
+
   if (!util.isBuffer(data)) {
     return this.emit('error', new Error('Invalid data'))
   }
   if (!util.isObject(this.fd)) {
     return this.once('open', function () {
-      this._write(data, encoding, cb)
+      this._write(data, encoding, callbk)
     })
   }
-  if (typeof cb === 'function') {
-    cb = function (err) {
-      if (err) {
-        console.log(err)
-        this.emit('error', err)
+  var callback = maybeCallback(callbk)
+  this.toCall = callback
+  this.isWriting = false
+  var self = this
+  this.fd.onerror = callback
+  var bufblob = new Blob([data], {type: 'application/octet-binary'}) // eslint-disable-line
+  if (this.fd.readyState > 0) {
+    if (typeof this.tmpbuffer === 'undefined') {
+      this.tmpbuffer = []
+    }
+    this.tmpbuffer += data
+    this.isWriting = false
+  } else {
+    this.fd.write(bufblob)
+    this.bytesWritten += data.length
+    callback(null, bufblob.length)
+  }
+  this.fd.onwriteend = function (e) {
+    if (!self.isWriting) {
+      if (self.tmpbuffer.length > 0) {
+        self.isWriting = true
+        var tmpblob = new Blob([self.tmpbuffer], {type: 'application/octet-binary'}) // eslint-disable-line
+        self.tmpbuffer = []
+        self.fd.write(tmpblob)
+        callback(null, tmpblob.length)
+        self.bytesWritten += self.tmpbuffer.length
       }
     }
-  }
-  var self = this
-  exports.write(this.fd, data, 0, data.length, this.pos, function (er, bytes) {
-    if (er) {
-      self.destroy()
-      return cb(er)
-    }
-    self.bytesWritten += bytes
-    cb()
-  })
-  if (!util.isUndefined(this.pos)) {
-    this.pos += data.length
   }
 }
 
