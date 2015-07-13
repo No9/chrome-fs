@@ -51,7 +51,8 @@ Sync apis won't be supported they are listed here https://github.com/No9/chrome-
 - [ ] fs.watch(filename[, options][, listener])
 - [x] fs.exists(path, callback)
 - [ ] fs.access(path[, mode], callback)
-- [ ] fs.createReadStream(path[, options])
+- [x] fs.createReadStream(path[, options])
+- [x] fs.createWriteStream(path[, options])
 
 #### Class: - fs.Stats 
 - [ ] fs.Stats
