@@ -1,6 +1,8 @@
 # chrome-fs
 Use the Node `fs` API in Chrome Apps
 
+This module is used by [chromiumify](https://github.com/chromiumify)
+
 ## Usage 
 
 This library can be used directly with your browserify builds with targeting Chrome Packaged Apps. 
