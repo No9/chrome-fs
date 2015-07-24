@@ -21,7 +21,8 @@
   },
   "homepage": "https://github.com/No9/chrome-fs",
   "devDependencies": {
-    "launch-chrome-app": "^1.0.1"
+    "launch-chrome-app": "^1.0.1",
+    "tape": "^4.0.1"
   },
   "dependencies": {
     "util": "^0.10.3"

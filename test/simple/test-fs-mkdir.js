@@ -26,13 +26,12 @@ var fs = require('../../chrome')
 var pathname = common.tmpDir + 'test1'
 var ncalls = 0
 var ncalls2 = 0
-// Test create of an existing dir doesn't throw
 
 fs.mkdir(pathname, function (err) {
   assert.equal(err, null)
   ncalls++
   fs.mkdir(pathname, function (err) {
-    assert.equal(err, null)
+    assert.equal(err.code, 'EEXIST')
     ncalls++
     assert.equal(ncalls, 2)
     fs.rmdir(pathname, function () {

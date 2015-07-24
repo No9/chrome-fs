@@ -2,7 +2,7 @@ var util = require('util')
 var Buffer = require('buffer').Buffer
 var Stream = require('stream').Stream
 var constants = require('constants')
-
+var p = require('path')
 var Readable = Stream.Readable
 var Writable = Stream.Writable
 
@@ -73,9 +73,12 @@ function resolve (path) {
   if (path === null) {
     return null
   }
+  if (typeof path === 'undefined') {
+    return null
+  }
   // Don't let anything but strings be passed as on
   if (typeof path !== 'string') {
-    throw Error('Cannot resolve: Paths must be strings')
+    throw Error('Cannot resolve: Paths must be strings : ' + path.toString())
   }
   var retString = path
   if (retString[0] === '/') {
@@ -143,34 +146,64 @@ exports.fchmod = function (fd, mode, callback) {
 }
 
 exports.exists = function (path, callback) {
-  resolve(path)
+  if (path === '/') {
+    callback(true)
+  }
+  path = resolve(path)
   window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
       function (cfs) {
         cfs.root.getFile(path, {},
               function (fileEntry) {
                 callback(true)
               }, function () {
-                callback(false)
+                cfs.root.getDirectory(path, {},
+                  function (dirEntry) {
+                    callback(true)
+                  }, function () { callback(false) })
               })
       }, function () { callback(false) })
 }
 
 exports.mkdir = function (path, mode, callback) {
-  resolve(path)
+  path = resolve(path)
   if (util.isFunction(mode)) callback = mode
   callback = makeCallback(callback)
   if (!nullCheck(path, callback)) return
 
-  window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
-      function (cfs) {
-        cfs.root.getDirectory(path, {create: true},
-              function (dirEntry) {
-                callback()
-              }, callback)
-      }, callback)
+  exports.exists(path, function (exists) {
+    if (exists) {
+      var err = new Error()
+      err.code = 'EEXIST'
+      err.path = path
+      callback(err)
+    } else {
+      exports.exists(p.dirname(path), function (exists) {
+        if (exists || p.dirname(path) === '.') {
+          window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+            function (cfs) {
+              cfs.root.getDirectory(path, {create: true},
+                    function (dirEntry) {
+                      callback()
+                    }, callback)
+            }, callback)
+        } else {
+          var enoent = new Error()
+          enoent.code = 'ENOENT'
+          enoent.path = path
+          callback(enoent)
+        }
+      })
+    }
+  })
 }
 
 exports.rmdir = function (path, callback) {
+  if (path === '/') {
+    var permerr = new Error()
+    permerr.code = 'EPERM'
+    callback(permerr)
+    return
+  }
   resolve(path)
   callback = maybeCallback(callback)
   if (!nullCheck(path, callback)) return
@@ -181,8 +214,26 @@ exports.rmdir = function (path, callback) {
               function (dirEntry) {
                 dirEntry.remove(function () {
                   callback()
-                }, callback)
-              }, callback)
+                }, function (err) {
+                    if (err.code === 1) {
+                      var entryerr = new Error()
+                      entryerr.code = 'ENOENT'
+                      entryerr.path = path
+                      callback(entryerr)
+                    } else {
+                      callback(err)
+                    }
+                  })
+              }, function (err) {
+                    if (err.code === 1) {
+                      var entryerr = new Error()
+                      entryerr.code = 'ENOENT'
+                      entryerr.path = path
+                      callback(entryerr)
+                    } else {
+                      callback(err)
+                    }
+                  })
       }, callback)
 }
 
@@ -278,7 +329,7 @@ exports.stat = function (path, callback) {
           cfs.root.getFile(path, opts, function (fileEntry) {
             fileEntry.file(function (file) {
               var statval = { dev: 0,
-                              mode: 33206,
+                              mode: '0777',
                               nlink: 0,
                               uid: 0,
                               gid: 0,
@@ -301,7 +352,7 @@ exports.stat = function (path, callback) {
             if (err.name === 'TypeMismatchError') {
               cfs.root.getDirectory(path, opts, function (dirEntry) {
                var statval = { dev: 0,
-                                mode: 33206,
+                                mode: '0777',
                                 nlink: 0,
                                 uid: 0,
                                 gid: 0,
@@ -875,6 +926,13 @@ WriteStream.prototype._write = function (data, encoding, callbk) {
       this._write(data, encoding, callbk)
     })
   }
+
+  if (this.fd === null) {
+    return this.once('open', function () {
+      this._write(data, encoding, callbk)
+    })
+  }
+
   var callback = maybeCallback(callbk)
   this.toCall = callback
   this.isWriting = false
