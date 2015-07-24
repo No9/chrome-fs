@@ -6541,6 +6541,108 @@ function flagToString (flag) {
 }).call(this,require('_process'))
 },{"_process":12,"buffer":3,"constants":7,"path":11,"stream":24,"util":27}],29:[function(require,module,exports){
 (function (process){
+var path = require('path');
+var fs = require('fs');
+var _0777 = parseInt('0777', 8);
+
+module.exports = mkdirP.mkdirp = mkdirP.mkdirP = mkdirP;
+
+function mkdirP (p, opts, f, made) {
+    if (typeof opts === 'function') {
+        f = opts;
+        opts = {};
+    }
+    else if (!opts || typeof opts !== 'object') {
+        opts = { mode: opts };
+    }
+    
+    var mode = opts.mode;
+    var xfs = opts.fs || fs;
+    
+    if (mode === undefined) {
+        mode = _0777 & (~process.umask());
+    }
+    if (!made) made = null;
+    
+    var cb = f || function () {};
+    p = path.resolve(p);
+    
+    xfs.mkdir(p, mode, function (er) {
+        if (!er) {
+            made = made || p;
+            return cb(null, made);
+        }
+        switch (er.code) {
+            case 'ENOENT':
+                mkdirP(path.dirname(p), opts, function (er, made) {
+                    if (er) cb(er, made);
+                    else mkdirP(p, opts, cb, made);
+                });
+                break;
+
+            // In the case of any other error, just see if there's a dir
+            // there already.  If so, then hooray!  If not, then something
+            // is borked.
+            default:
+                xfs.stat(p, function (er2, stat) {
+                    // if the stat fails, then that's super weird.
+                    // let the original error be the failure reason.
+                    if (er2 || !stat.isDirectory()) cb(er, made)
+                    else cb(null, made);
+                });
+                break;
+        }
+    });
+}
+
+mkdirP.sync = function sync (p, opts, made) {
+    if (!opts || typeof opts !== 'object') {
+        opts = { mode: opts };
+    }
+    
+    var mode = opts.mode;
+    var xfs = opts.fs || fs;
+    
+    if (mode === undefined) {
+        mode = _0777 & (~process.umask());
+    }
+    if (!made) made = null;
+
+    p = path.resolve(p);
+
+    try {
+        xfs.mkdirSync(p, mode);
+        made = made || p;
+    }
+    catch (err0) {
+        switch (err0.code) {
+            case 'ENOENT' :
+                made = sync(path.dirname(p), opts, made);
+                sync(p, opts, made);
+                break;
+
+            // In the case of any other error, just see if there's a dir
+            // there already.  If so, then hooray!  If not, then something
+            // is borked.
+            default:
+                var stat;
+                try {
+                    stat = xfs.statSync(p);
+                }
+                catch (err1) {
+                    throw err0;
+                }
+                if (!stat.isDirectory()) throw err0;
+                break;
+        }
+    }
+
+    return made;
+};
+
+}).call(this,require('_process'))
+},{"_process":12,"fs":1,"path":11}],30:[function(require,module,exports){
+(function (process){
 var defined = require('defined');
 var createDefaultStream = require('./lib/default_stream');
 var Test = require('./lib/test');
@@ -6683,7 +6785,7 @@ function createHarness (conf_) {
 }
 
 }).call(this,require('_process'))
-},{"./lib/default_stream":30,"./lib/results":31,"./lib/test":32,"_process":12,"defined":36,"through":40}],30:[function(require,module,exports){
+},{"./lib/default_stream":31,"./lib/results":32,"./lib/test":33,"_process":12,"defined":37,"through":41}],31:[function(require,module,exports){
 (function (process){
 var through = require('through');
 var fs = require('fs');
@@ -6718,7 +6820,7 @@ module.exports = function () {
 };
 
 }).call(this,require('_process'))
-},{"_process":12,"fs":1,"through":40}],31:[function(require,module,exports){
+},{"_process":12,"fs":1,"through":41}],32:[function(require,module,exports){
 (function (process){
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
@@ -6912,7 +7014,7 @@ function has (obj, prop) {
 }
 
 }).call(this,require('_process'))
-},{"_process":12,"events":8,"inherits":37,"object-inspect":38,"resumer":39,"through":40}],32:[function(require,module,exports){
+},{"_process":12,"events":8,"inherits":38,"object-inspect":39,"resumer":40,"through":41}],33:[function(require,module,exports){
 (function (process,__dirname){
 var deepEqual = require('deep-equal');
 var defined = require('defined');
@@ -7412,7 +7514,7 @@ Test.skip = function (name_, _opts, _cb) {
 
 
 }).call(this,require('_process'),"/node_modules\\tape\\lib")
-},{"_process":12,"deep-equal":33,"defined":36,"events":8,"inherits":37,"path":11}],33:[function(require,module,exports){
+},{"_process":12,"deep-equal":34,"defined":37,"events":8,"inherits":38,"path":11}],34:[function(require,module,exports){
 var pSlice = Array.prototype.slice;
 var objectKeys = require('./lib/keys.js');
 var isArguments = require('./lib/is_arguments.js');
@@ -7508,7 +7610,7 @@ function objEquiv(a, b, opts) {
   return typeof a === typeof b;
 }
 
-},{"./lib/is_arguments.js":34,"./lib/keys.js":35}],34:[function(require,module,exports){
+},{"./lib/is_arguments.js":35,"./lib/keys.js":36}],35:[function(require,module,exports){
 var supportsArgumentsClass = (function(){
   return Object.prototype.toString.call(arguments)
 })() == '[object Arguments]';
@@ -7530,7 +7632,7 @@ function unsupported(object){
     false;
 };
 
-},{}],35:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
 exports = module.exports = typeof Object.keys === 'function'
   ? Object.keys : shim;
 
@@ -7541,16 +7643,16 @@ function shim (obj) {
   return keys;
 }
 
-},{}],36:[function(require,module,exports){
+},{}],37:[function(require,module,exports){
 module.exports = function () {
     for (var i = 0; i < arguments.length; i++) {
         if (arguments[i] !== undefined) return arguments[i];
     }
 };
 
-},{}],37:[function(require,module,exports){
+},{}],38:[function(require,module,exports){
 arguments[4][9][0].apply(exports,arguments)
-},{"dup":9}],38:[function(require,module,exports){
+},{"dup":9}],39:[function(require,module,exports){
 module.exports = function inspect_ (obj, opts, depth, seen) {
     if (!opts) opts = {};
     
@@ -7699,7 +7801,7 @@ function inspectString (str) {
     }
 }
 
-},{}],39:[function(require,module,exports){
+},{}],40:[function(require,module,exports){
 (function (process){
 var through = require('through');
 var nextTick = typeof setImmediate !== 'undefined'
@@ -7732,7 +7834,7 @@ module.exports = function (write, end) {
 };
 
 }).call(this,require('_process'))
-},{"_process":12,"through":40}],40:[function(require,module,exports){
+},{"_process":12,"through":41}],41:[function(require,module,exports){
 (function (process){
 var Stream = require('stream')
 
@@ -7844,7 +7946,7 @@ function through (write, end, opts) {
 
 
 }).call(this,require('_process'))
-},{"_process":12,"stream":24}],41:[function(require,module,exports){
+},{"_process":12,"stream":24}],42:[function(require,module,exports){
 require('../simple/test-fs-stat')
 require('../simple/test-fs-exists')
 require('../simple/test-fs-write-file')
@@ -7861,15 +7963,16 @@ require('../simple/test-fs-empty-read-stream')
 require('../simple/test-fs-write-stream')
 require('../dat-test/mkdir')
 require('../dat-test/rmdir')
+require('../libs/mkdirp-test')
 
-},{"../dat-test/mkdir":43,"../dat-test/rmdir":44,"../simple/test-fs-append-file":45,"../simple/test-fs-empty-read-stream":46,"../simple/test-fs-exists":47,"../simple/test-fs-mkdir":48,"../simple/test-fs-read":52,"../simple/test-fs-read-buffer":49,"../simple/test-fs-read-stream":51,"../simple/test-fs-read-stream-fd":50,"../simple/test-fs-readdir":53,"../simple/test-fs-stat":54,"../simple/test-fs-write":58,"../simple/test-fs-write-buffer":55,"../simple/test-fs-write-file":56,"../simple/test-fs-write-stream":57}],42:[function(require,module,exports){
+},{"../dat-test/mkdir":44,"../dat-test/rmdir":45,"../libs/mkdirp-test":46,"../simple/test-fs-append-file":47,"../simple/test-fs-empty-read-stream":48,"../simple/test-fs-exists":49,"../simple/test-fs-mkdir":50,"../simple/test-fs-read":54,"../simple/test-fs-read-buffer":51,"../simple/test-fs-read-stream":53,"../simple/test-fs-read-stream-fd":52,"../simple/test-fs-readdir":55,"../simple/test-fs-stat":56,"../simple/test-fs-write":60,"../simple/test-fs-write-buffer":57,"../simple/test-fs-write-file":58,"../simple/test-fs-write-stream":59}],43:[function(require,module,exports){
 exports.tmpDir = '/'
 exports.error = function (msg) {
   console.log(msg)
 }
 exports.fixturesDir = '/'
 
-},{}],43:[function(require,module,exports){
+},{}],44:[function(require,module,exports){
 var test = require('tape').test
 var fs = require('../../chrome')
 
@@ -7922,7 +8025,7 @@ test('mkdir with modes', function (t) {
   })
 })
 
-},{"../../chrome":28,"tape":29}],44:[function(require,module,exports){
+},{"../../chrome":28,"tape":30}],45:[function(require,module,exports){
 var test = require('tape').test
 var fs = require('../../chrome')
 
@@ -7944,7 +8047,26 @@ test('rmdir', function (t) {
   })
 })
 
-},{"../../chrome":28,"tape":29}],45:[function(require,module,exports){
+},{"../../chrome":28,"tape":30}],46:[function(require,module,exports){
+var fs = require('../../chrome')
+var mkdirp = require('mkdirp')
+var path = '/herp/derp'
+var assert = require('assert')
+
+mkdirp(path, { 'fs': fs }, function (success) {
+  fs.exists(path, function (exists) {
+    fs.rmdir(path, function (err) {
+      assert.equal(typeof err, 'undefined')
+      fs.rmdir('/herp', function (err) {
+        assert.equal(typeof err, 'undefined')
+        assert.ok('mkdirp works')
+        console.log('mkdirp-test success')
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"assert":2,"mkdirp":29}],47:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -8059,7 +8181,7 @@ fs.writeFile(filename3, currentFileData, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"../common":42,"assert":2,"buffer":3,"path":11}],46:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],48:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8133,7 +8255,7 @@ fs.writeFile(emptyFile, '', function (e) {
   })
 })
 
-},{"../../chrome":28,"../common":42,"assert":2,"path":11}],47:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"path":11}],49:[function(require,module,exports){
 var fs = require('../../chrome')
 var assert = require('assert')
 var exists
@@ -8158,7 +8280,7 @@ fs.writeFile(f, 'Some lorum impsum', function () {
   })
 })
 
-},{"../../chrome":28,"assert":2}],48:[function(require,module,exports){
+},{"../../chrome":28,"assert":2}],50:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8216,7 +8338,7 @@ fs.mkdir(pathname2, 511, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":42,"assert":2}],49:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2}],51:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8263,7 +8385,7 @@ fs.writeFile(filepath, expected, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":42,"assert":2,"buffer":3,"path":11}],50:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],52:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8320,7 +8442,7 @@ fs.writeFile(file, input, function (e) {
   })
 })
 
-},{"../../chrome":28,"../common":42,"assert":2,"path":11}],51:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"path":11}],53:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8534,7 +8656,7 @@ process.on('exit', function () {
 })
  */
 
-},{"../../chrome":28,"../common":42,"assert":2,"path":11}],52:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"path":11}],54:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8580,7 +8702,7 @@ fs.writeFile(filepath, expected, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":42,"assert":2,"path":11}],53:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"path":11}],55:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8651,7 +8773,7 @@ fs.mkdir(readdirDir2, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":42,"assert":2,"path":11}],54:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"path":11}],56:[function(require,module,exports){
 (function (global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -8776,7 +8898,7 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
 })
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../chrome":28,"assert":2}],55:[function(require,module,exports){
+},{"../../chrome":28,"assert":2}],57:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8832,7 +8954,7 @@ fs.open(filename, 'w', '0644', function (err, fd) {
   })
 })
 
-},{"../../chrome":28,"../common":42,"assert":2,"buffer":3,"path":11}],56:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],58:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -8969,7 +9091,7 @@ fs.writeFile(filename3, n, { mode: m }, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"../common":42,"assert":2,"buffer":3,"path":11}],57:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],59:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9066,7 +9188,7 @@ for (var i = 0; i < 11; i++) {
 })
 */
 
-},{"../../chrome":28,"../common":42,"assert":2,"path":11}],58:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"path":11}],60:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9145,4 +9267,4 @@ function (err, fd) {
   })
 })
 
-},{"../../chrome":28,"../common":42,"assert":2,"buffer":3,"constants":7,"path":11}]},{},[41]);
+},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"constants":7,"path":11}]},{},[42]);
