@@ -5755,7 +5755,7 @@ exports.rmdir = function (path, callback) {
                 dirEntry.remove(function () {
                   callback()
                 }, function (err) {
-                    if (err.code === 1) {
+                    if (err.name === 'NotFoundError') {
                       var entryerr = new Error()
                       entryerr.code = 'ENOENT'
                       entryerr.path = path
@@ -5765,7 +5765,7 @@ exports.rmdir = function (path, callback) {
                     }
                   })
               }, function (err) {
-                    if (err.code === 1) {
+                    if (err.name === 'NotFoundError') {
                       var entryerr = new Error()
                       entryerr.code = 'ENOENT'
                       entryerr.path = path
@@ -5938,13 +5938,16 @@ exports.open = function (path, flags, mode, callback) {
           if (flags.indexOf('w') > -1) {
             opts = {create: true}
           }
+          if (flags.indexOf('x') > -1) {
+            opts.exclusive = true
+          }
           cfs.root.getFile(
                 path,
                 opts,
                 function (fileEntry) {
                   // if its a write then we get the file writer
                   // otherwise we get the file because 'standards'
-                  if (flags.indexOf('w') > -1) {
+                  if (flags.indexOf('w') > -1 || flags.indexOf('a') > -1) {
                     fileEntry.createWriter(function (fileWriter) {
                       fileWriter.fullPath = fileEntry.fullPath
                       callback(null, fileWriter)
@@ -5956,10 +5959,22 @@ exports.open = function (path, flags, mode, callback) {
                   }
                 }, function (err) {
                   // Work around for directory file descriptor
-                  if (err.name === 'TypeMismatchError') {
-                    var dird = {}
-                    dird.filePath = path
-                    callback(null, dird)
+                  if (err.name === 'TypeMismatchError' || err.name === 'SecurityError') {
+                    // It's a write on a directory
+                    if (flags.indexOf('w') > -1) {
+                      var eisdir = new Error()
+                      eisdir.code = 'EISDIR'
+                      callback(eisdir)
+                    } else {
+                      var dird = {}
+                      dird.filePath = path
+                      callback(null, dird)
+                    }
+
+                  } else if (err.name === 'InvalidModificationError') {
+                    var eexists = new Error()
+                    eexists.code = 'EEXIST'
+                    callback(eexists)
                   } else {
                     callback(err)
                   }
@@ -6046,7 +6061,11 @@ exports.readFile = function (path, options, cb) {
                   fileEntry.onerror = callback
                   var fileReader = new FileReader() // eslint-disable-line
                   fileReader.onload = function (evt) {
-                    window.setTimeout(callback, 0, null, this.result)
+                    if (options.encoding === null) {
+                      window.setTimeout(callback, 0, null, new Buffer(this.result, 'binary'))
+                    } else {
+                      window.setTimeout(callback, 0, null, this.result)
+                    }
                   }
                   fileReader.onerror = function (evt) {
                     callback(evt, null)
@@ -6130,7 +6149,9 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
 
 exports.unlink = function (fd, callback) {
   var path = resolve(fd)
-  window.requestFileSystem(
+  exports.exists(path, function (exists) {
+    if (exists) {
+      window.requestFileSystem(
         window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
         function (cfs) {
           cfs.root.getFile(
@@ -6140,6 +6161,13 @@ exports.unlink = function (fd, callback) {
                   fileEntry.remove(callback)
                 })
         }, callback)
+    } else {
+      var enoent = new Error()
+      enoent.code = 'ENOENT'
+      enoent.path = path
+      callback(enoent)
+    }
+  })
 }
 
 exports.writeFile = function (path, data, options, cb) {
@@ -6457,7 +6485,6 @@ WriteStream.prototype.open = function () {
 }
 
 WriteStream.prototype._write = function (data, encoding, callbk) {
-
   if (!util.isBuffer(data)) {
     return this.emit('error', new Error('Invalid data'))
   }
@@ -6477,7 +6504,25 @@ WriteStream.prototype._write = function (data, encoding, callbk) {
   this.toCall = callback
   this.isWriting = false
   var self = this
-  this.fd.onerror = callback
+  this.fd.onerror = function (err) {
+    if (err.name === 'TypeMismatchError') {
+      // It's a write on a directory
+      if (self.flags.indexOf('w')) {
+        var eisdir = new Error()
+        eisdir.code = 'EISDIR'
+        callback(eisdir)
+      } else {
+        callback(err)
+      }
+    } else if (err.name === 'InvalidModificationError') {
+      var eexists = new Error()
+      eexists.code = 'EEXIST'
+      callback(eexists)
+    } else {
+      callback(err)
+    }
+  }
+
   var bufblob = new Blob([data], {type: 'application/octet-binary'}) // eslint-disable-line
   if (this.fd.readyState > 0) {
     if (typeof this.tmpbuffer === 'undefined') {
@@ -6486,19 +6531,34 @@ WriteStream.prototype._write = function (data, encoding, callbk) {
     this.tmpbuffer += data
     this.isWriting = false
   } else {
-    this.fd.write(bufblob)
-    this.bytesWritten += data.length
-    callback(null, bufblob.length)
+    if (typeof this.fd.write === 'function') {
+      if (this.flags.indexOf('a') > -1) {
+        this.fd.seek(this.fd.length)
+      }
+      this.fd.write(bufblob)
+      this.bytesWritten += data.length
+      callback(null, bufblob.length)
+    } else {
+      if (typeof this.tmpbuffer === 'undefined') {
+        this.tmpbuffer = []
+      }
+      this.tmpbuffer += data
+      this.isWriting = false
+    }
   }
-  this.fd.onwriteend = function (e) {
-    if (!self.isWriting) {
-      if (self.tmpbuffer.length > 0) {
-        self.isWriting = true
-        var tmpblob = new Blob([self.tmpbuffer], {type: 'application/octet-binary'}) // eslint-disable-line
-        self.tmpbuffer = []
-        self.fd.write(tmpblob)
-        callback(null, tmpblob.length)
-        self.bytesWritten += self.tmpbuffer.length
+  // When the ws.end() is called directly without an 'write'
+  // this.fd.onwriteend = function (e) { throws an is null error
+  if (this.fd !== null) {
+    this.fd.onwriteend = function (e) {
+      if (!self.isWriting) {
+        if (self.tmpbuffer.length > 0) {
+          self.isWriting = true
+          var tmpblob = new Blob([self.tmpbuffer], {type: 'application/octet-binary'}) // eslint-disable-line
+          self.tmpbuffer = []
+          self.fd.write(tmpblob)
+          callback(null, tmpblob.length)
+          self.bytesWritten += self.tmpbuffer.length
+        }
       }
     }
   }
@@ -7960,12 +8020,12 @@ require('../simple/test-fs-read-buffer')
 require('../simple/test-fs-read-stream-fd')
 require('../simple/test-fs-read-stream')
 require('../simple/test-fs-empty-read-stream')
-require('../simple/test-fs-write-stream')
 require('../dat-test/mkdir')
 require('../dat-test/rmdir')
+require('../dat-test/write-stream')
 require('../libs/mkdirp-test')
 
-},{"../dat-test/mkdir":44,"../dat-test/rmdir":45,"../libs/mkdirp-test":46,"../simple/test-fs-append-file":47,"../simple/test-fs-empty-read-stream":48,"../simple/test-fs-exists":49,"../simple/test-fs-mkdir":50,"../simple/test-fs-read":54,"../simple/test-fs-read-buffer":51,"../simple/test-fs-read-stream":53,"../simple/test-fs-read-stream-fd":52,"../simple/test-fs-readdir":55,"../simple/test-fs-stat":56,"../simple/test-fs-write":60,"../simple/test-fs-write-buffer":57,"../simple/test-fs-write-file":58,"../simple/test-fs-write-stream":59}],43:[function(require,module,exports){
+},{"../dat-test/mkdir":44,"../dat-test/rmdir":45,"../dat-test/write-stream":46,"../libs/mkdirp-test":47,"../simple/test-fs-append-file":48,"../simple/test-fs-empty-read-stream":49,"../simple/test-fs-exists":50,"../simple/test-fs-mkdir":51,"../simple/test-fs-read":55,"../simple/test-fs-read-buffer":52,"../simple/test-fs-read-stream":54,"../simple/test-fs-read-stream-fd":53,"../simple/test-fs-readdir":56,"../simple/test-fs-stat":57,"../simple/test-fs-write":60,"../simple/test-fs-write-buffer":58,"../simple/test-fs-write-file":59}],43:[function(require,module,exports){
 exports.tmpDir = '/'
 exports.error = function (msg) {
   console.log(msg)
@@ -8048,6 +8108,112 @@ test('rmdir', function (t) {
 })
 
 },{"../../chrome":28,"tape":30}],46:[function(require,module,exports){
+(function (Buffer){
+var fs = require('../../chrome')
+var test = require('tape').test
+
+test('createWriteStream', function (t) {
+  var ws = fs.createWriteStream('/test1.txt')
+
+  ws.write('hello ')
+  ws.write('hi ')
+  ws.write('ho ')
+  ws.write('hey ')
+  ws.end('world')
+
+  ws.on('finish', function () {
+    fs.readFile('/test1.txt', 'utf-8', function (err, buf) {
+      t.ok(!err, 'Reading /test1.txt')
+      t.same(buf, 'hello hi ho hey world', 'Text is the same')
+      fs.unlink('/test1.txt', function (err) {
+        t.ok(!err, 'unlinked /test1.txt')
+        t.end()
+      })
+    })
+  })
+})
+
+test('createWriteStream big', function (t) {
+  var ws = fs.createWriteStream('/test2.txt')
+  var big = new Buffer(100 * 1024)
+
+  ws.end(big)
+
+  ws.on('finish', function () {
+    fs.readFile('/test2.txt', function (err, buf) {
+      t.ok(!err, 'Read Test Shouldn\'t fail')
+      t.same(buf, big, 'Buffers are equal')
+      fs.unlink('/test2.txt', function (err) {
+        t.ok(!err, 'unlinked /test2.txt')
+        t.end()
+      })
+    })
+  })
+})
+
+test('createWriteStream append', function (t) {
+  var ws = fs.createWriteStream('/test3.txt')
+
+  ws.write('hello ')
+  ws.end('world')
+
+  ws.on('finish', function () {
+    var ws = fs.createWriteStream('/test3.txt', {flags: 'a'})
+
+    ws.write(' hej ')
+    ws.end('verden')
+
+    ws.on('finish', function () {
+      fs.readFile('/test3.txt', 'utf-8', function (err, buf) {
+        t.ok(!err)
+        t.same(buf, 'hello world hej verden')
+        fs.unlink('/test3.txt', function (err) {
+          t.ok(!err, 'unlinked /test3.txt')
+          t.end()
+        })
+      })
+    })
+  })
+})
+
+test('createWriteStream not exists', function (t) {
+  var ws = fs.createWriteStream('/test4.txt')
+
+  ws.write('hello ')
+  ws.end('world')
+
+  ws.on('finish', function () {
+    var ws = fs.createWriteStream('/test4.txt', {flags: 'wx'})
+
+    ws.write(' hej ')
+    ws.end('verden')
+
+    ws.on('error', function (err) {
+      t.ok(err)
+      t.same(err.code, 'EEXIST')
+      fs.unlink('/test4.txt', function (err) {
+        t.ok(!err, 'unlinked /test4.txt')
+        t.end()
+      })
+    })
+  })
+})
+
+test('createWriteStream is dir', function (t) {
+  var ws = fs.createWriteStream('/')
+
+  ws.write('hello ')
+  ws.end('world')
+
+  ws.on('error', function (err) {
+    t.ok(err)
+    t.same(err.code, 'EISDIR')
+    t.end()
+  })
+})
+
+}).call(this,require("buffer").Buffer)
+},{"../../chrome":28,"buffer":3,"tape":30}],47:[function(require,module,exports){
 var fs = require('../../chrome')
 var mkdirp = require('mkdirp')
 var path = '/herp/derp'
@@ -8066,7 +8232,7 @@ mkdirp(path, { 'fs': fs }, function (success) {
   })
 })
 
-},{"../../chrome":28,"assert":2,"mkdirp":29}],47:[function(require,module,exports){
+},{"../../chrome":28,"assert":2,"mkdirp":29}],48:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -8181,7 +8347,7 @@ fs.writeFile(filename3, currentFileData, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],48:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],49:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8255,7 +8421,7 @@ fs.writeFile(emptyFile, '', function (e) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2,"path":11}],49:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"path":11}],50:[function(require,module,exports){
 var fs = require('../../chrome')
 var assert = require('assert')
 var exists
@@ -8280,7 +8446,7 @@ fs.writeFile(f, 'Some lorum impsum', function () {
   })
 })
 
-},{"../../chrome":28,"assert":2}],50:[function(require,module,exports){
+},{"../../chrome":28,"assert":2}],51:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8338,7 +8504,7 @@ fs.mkdir(pathname2, 511, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2}],51:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2}],52:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8385,7 +8551,7 @@ fs.writeFile(filepath, expected, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],52:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],53:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8442,7 +8608,7 @@ fs.writeFile(file, input, function (e) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2,"path":11}],53:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"path":11}],54:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8656,7 +8822,7 @@ process.on('exit', function () {
 })
  */
 
-},{"../../chrome":28,"../common":43,"assert":2,"path":11}],54:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"path":11}],55:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8702,7 +8868,7 @@ fs.writeFile(filepath, expected, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2,"path":11}],55:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"path":11}],56:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8773,7 +8939,7 @@ fs.mkdir(readdirDir2, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2,"path":11}],56:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"path":11}],57:[function(require,module,exports){
 (function (global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -8800,8 +8966,8 @@ var assert = require('assert')
 var fs = require('../../chrome')
 var got_error = false
 var success_count = 0
-
-fs.stat('.', function (err, stats) {
+var dirlocation = '/'
+fs.stat(dirlocation, function (err, stats) {
   if (err) {
     got_error = true
     console.log(err)
@@ -8813,7 +8979,7 @@ fs.stat('.', function (err, stats) {
   assert(this === global)
 })
 
-fs.stat('.', function (err, stats) {
+fs.stat(dirlocation, function (err, stats) {
   if (err) {
     got_error = true
   }
@@ -8832,9 +8998,11 @@ fs.stat('.', function (err, stats) {
 })
 */
 // fstat
-fs.open('.', 'r', undefined, function (err, fd) {
-  assert.ok(!err)
-  assert.ok(fd)
+fs.open(dirlocation, 'r', undefined, function (err, fd) {
+  console.log(err)
+  assert.ok(!err, 'Error on fs open ')
+
+  assert.ok(fd, 'fd is an object')
   fs.fstat(fd, function (err, stats) {
     if (err) {
       got_error = true
@@ -8898,7 +9066,7 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
 })
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../chrome":28,"assert":2}],57:[function(require,module,exports){
+},{"../../chrome":28,"assert":2}],58:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8954,7 +9122,7 @@ fs.open(filename, 'w', '0644', function (err, fd) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],58:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],59:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -9091,104 +9259,7 @@ fs.writeFile(filename3, n, { mode: m }, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],59:[function(require,module,exports){
-// Copyright Joyent, Inc. and other Node contributors.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to permit
-// persons to whom the Software is furnished to do so, subject to the
-// following conditions:
-//
-// The above copyright notice and this permission notice shall be included
-// in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-// USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-var common = require('../common')
-var assert = require('assert')
-
-var path = require('path')
-var fs = require('../../chrome')
-var fn = path.join(common.tmpDir, 'write-stream.txt')
-var file = fs.createWriteStream(fn, {
-      highWaterMark: 10
-    })
-
-// var EXPECTED = '012345678910'
-
-var callbacks = {
-      open: -1,
-      drain: -2,
-      close: -1
-    }
-
-file
-  .on('open', function (fd) {
-      console.log('open!')
-      callbacks.open++
-      // Ignoring as this fd is a shim onto the Web FS API
-      // assert.equal('object', typeof fd)
-    })
-  .on('error', function (err) {
-      assert.equal(err, null)
-      console.log('expected error')
-    })
-  .on('drain', function () {
-      console.log('drain!', callbacks.drain)
-      callbacks.drain++
-      assert.equal(callbacks.drain, -1, 'Drain Count of writestream')
-      if (callbacks.drain === -1) {
-        console.log('test-fs-write-stream 1 success')
-        // assert.equal(EXPECTED, fs.readFileSync(fn, 'utf8'))
-        // file.write(EXPECTED)
-      } else if (callbacks.drain === 0) {
-        // assert.equal(EXPECTED + EXPECTED, fs.readFileSync(fn, 'utf8'))
-        // file.end()
-      }
-    })
-  .on('close', function () {
-      // As there is no process.exit so this will have to be forced.
-      console.log('close!')
-      // assert.strictEqual(file.bytesWritten, EXPECTED.length * 2)
-
-      callbacks.close++
-      // assert.throws(function () {
-      //   console.log('write after end should not be allowed')
-      //   file.write('should not work anymore')
-      // })
-      for (var k in callbacks) {
-        assert.equal(0, callbacks[k], k + ' count off by ' + callbacks[k])
-      }
-      // fs.unlinkSync(fn)
-    })
-
-for (var i = 0; i < 11; i++) {
-  (function (i) {
-    // console.log('writing ' + i)
-    file.write('' + i)
-  })(i)
-  if (i === 10) {
-    // setTimeout(file.close, 500)
-  }
-}
-/* process.on('exit', function () {
-  for (var k in callbacks) {
-    assert.equal(0, callbacks[k], k + ' count off by ' + callbacks[k])
-  }
-  console.log('ok')
-})
-*/
-
-},{"../../chrome":28,"../common":43,"assert":2,"path":11}],60:[function(require,module,exports){
+},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],60:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a

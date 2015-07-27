@@ -23,8 +23,8 @@ var assert = require('assert')
 var fs = require('../../chrome')
 var got_error = false
 var success_count = 0
-
-fs.stat('.', function (err, stats) {
+var dirlocation = '/'
+fs.stat(dirlocation, function (err, stats) {
   if (err) {
     got_error = true
     console.log(err)
@@ -36,7 +36,7 @@ fs.stat('.', function (err, stats) {
   assert(this === global)
 })
 
-fs.stat('.', function (err, stats) {
+fs.stat(dirlocation, function (err, stats) {
   if (err) {
     got_error = true
   }
@@ -55,9 +55,11 @@ fs.stat('.', function (err, stats) {
 })
 */
 // fstat
-fs.open('.', 'r', undefined, function (err, fd) {
-  assert.ok(!err)
-  assert.ok(fd)
+fs.open(dirlocation, 'r', undefined, function (err, fd) {
+  console.log(err)
+  assert.ok(!err, 'Error on fs open ')
+
+  assert.ok(fd, 'fd is an object')
   fs.fstat(fd, function (err, stats) {
     if (err) {
       got_error = true

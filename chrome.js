@@ -215,7 +215,7 @@ exports.rmdir = function (path, callback) {
                 dirEntry.remove(function () {
                   callback()
                 }, function (err) {
-                    if (err.code === 1) {
+                    if (err.name === 'NotFoundError') {
                       var entryerr = new Error()
                       entryerr.code = 'ENOENT'
                       entryerr.path = path
@@ -225,7 +225,7 @@ exports.rmdir = function (path, callback) {
                     }
                   })
               }, function (err) {
-                    if (err.code === 1) {
+                    if (err.name === 'NotFoundError') {
                       var entryerr = new Error()
                       entryerr.code = 'ENOENT'
                       entryerr.path = path
@@ -398,13 +398,16 @@ exports.open = function (path, flags, mode, callback) {
           if (flags.indexOf('w') > -1) {
             opts = {create: true}
           }
+          if (flags.indexOf('x') > -1) {
+            opts.exclusive = true
+          }
           cfs.root.getFile(
                 path,
                 opts,
                 function (fileEntry) {
                   // if its a write then we get the file writer
                   // otherwise we get the file because 'standards'
-                  if (flags.indexOf('w') > -1) {
+                  if (flags.indexOf('w') > -1 || flags.indexOf('a') > -1) {
                     fileEntry.createWriter(function (fileWriter) {
                       fileWriter.fullPath = fileEntry.fullPath
                       callback(null, fileWriter)
@@ -416,10 +419,22 @@ exports.open = function (path, flags, mode, callback) {
                   }
                 }, function (err) {
                   // Work around for directory file descriptor
-                  if (err.name === 'TypeMismatchError') {
-                    var dird = {}
-                    dird.filePath = path
-                    callback(null, dird)
+                  if (err.name === 'TypeMismatchError' || err.name === 'SecurityError') {
+                    // It's a write on a directory
+                    if (flags.indexOf('w') > -1) {
+                      var eisdir = new Error()
+                      eisdir.code = 'EISDIR'
+                      callback(eisdir)
+                    } else {
+                      var dird = {}
+                      dird.filePath = path
+                      callback(null, dird)
+                    }
+
+                  } else if (err.name === 'InvalidModificationError') {
+                    var eexists = new Error()
+                    eexists.code = 'EEXIST'
+                    callback(eexists)
                   } else {
                     callback(err)
                   }
@@ -506,7 +521,11 @@ exports.readFile = function (path, options, cb) {
                   fileEntry.onerror = callback
                   var fileReader = new FileReader() // eslint-disable-line
                   fileReader.onload = function (evt) {
-                    window.setTimeout(callback, 0, null, this.result)
+                    if (options.encoding === null) {
+                      window.setTimeout(callback, 0, null, new Buffer(this.result, 'binary'))
+                    } else {
+                      window.setTimeout(callback, 0, null, this.result)
+                    }
                   }
                   fileReader.onerror = function (evt) {
                     callback(evt, null)
@@ -590,7 +609,9 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
 
 exports.unlink = function (fd, callback) {
   var path = resolve(fd)
-  window.requestFileSystem(
+  exports.exists(path, function (exists) {
+    if (exists) {
+      window.requestFileSystem(
         window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
         function (cfs) {
           cfs.root.getFile(
@@ -600,6 +621,13 @@ exports.unlink = function (fd, callback) {
                   fileEntry.remove(callback)
                 })
         }, callback)
+    } else {
+      var enoent = new Error()
+      enoent.code = 'ENOENT'
+      enoent.path = path
+      callback(enoent)
+    }
+  })
 }
 
 exports.writeFile = function (path, data, options, cb) {
@@ -917,7 +945,6 @@ WriteStream.prototype.open = function () {
 }
 
 WriteStream.prototype._write = function (data, encoding, callbk) {
-
   if (!util.isBuffer(data)) {
     return this.emit('error', new Error('Invalid data'))
   }
@@ -937,7 +964,25 @@ WriteStream.prototype._write = function (data, encoding, callbk) {
   this.toCall = callback
   this.isWriting = false
   var self = this
-  this.fd.onerror = callback
+  this.fd.onerror = function (err) {
+    if (err.name === 'TypeMismatchError') {
+      // It's a write on a directory
+      if (self.flags.indexOf('w')) {
+        var eisdir = new Error()
+        eisdir.code = 'EISDIR'
+        callback(eisdir)
+      } else {
+        callback(err)
+      }
+    } else if (err.name === 'InvalidModificationError') {
+      var eexists = new Error()
+      eexists.code = 'EEXIST'
+      callback(eexists)
+    } else {
+      callback(err)
+    }
+  }
+
   var bufblob = new Blob([data], {type: 'application/octet-binary'}) // eslint-disable-line
   if (this.fd.readyState > 0) {
     if (typeof this.tmpbuffer === 'undefined') {
@@ -946,19 +991,34 @@ WriteStream.prototype._write = function (data, encoding, callbk) {
     this.tmpbuffer += data
     this.isWriting = false
   } else {
-    this.fd.write(bufblob)
-    this.bytesWritten += data.length
-    callback(null, bufblob.length)
+    if (typeof this.fd.write === 'function') {
+      if (this.flags.indexOf('a') > -1) {
+        this.fd.seek(this.fd.length)
+      }
+      this.fd.write(bufblob)
+      this.bytesWritten += data.length
+      callback(null, bufblob.length)
+    } else {
+      if (typeof this.tmpbuffer === 'undefined') {
+        this.tmpbuffer = []
+      }
+      this.tmpbuffer += data
+      this.isWriting = false
+    }
   }
-  this.fd.onwriteend = function (e) {
-    if (!self.isWriting) {
-      if (self.tmpbuffer.length > 0) {
-        self.isWriting = true
-        var tmpblob = new Blob([self.tmpbuffer], {type: 'application/octet-binary'}) // eslint-disable-line
-        self.tmpbuffer = []
-        self.fd.write(tmpblob)
-        callback(null, tmpblob.length)
-        self.bytesWritten += self.tmpbuffer.length
+  // When the ws.end() is called directly without an 'write'
+  // this.fd.onwriteend = function (e) { throws an is null error
+  if (this.fd !== null) {
+    this.fd.onwriteend = function (e) {
+      if (!self.isWriting) {
+        if (self.tmpbuffer.length > 0) {
+          self.isWriting = true
+          var tmpblob = new Blob([self.tmpbuffer], {type: 'application/octet-binary'}) // eslint-disable-line
+          self.tmpbuffer = []
+          self.fd.write(tmpblob)
+          callback(null, tmpblob.length)
+          self.bytesWritten += self.tmpbuffer.length
+        }
       }
     }
   }
