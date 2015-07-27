@@ -1,6 +1,6 @@
 {
   "name": "chrome-fs",
-  "version": "3.1.0",
+  "version": "4.0.0",
   "description": "Use the Node `fs` API in Chrome Apps",
   "main": "main.js",
   "browser": "chrome.js",
