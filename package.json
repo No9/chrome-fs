@@ -12,7 +12,9 @@
     "url": "https://github.com/No9/chrome-fs.git"
   },
   "keywords": [
-    "chrome"
+    "chrome",
+    "browserify-tool",
+    "chromiumify"
   ],
   "author": "anton whalley",
   "license": "MIT",
