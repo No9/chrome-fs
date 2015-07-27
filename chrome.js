@@ -418,8 +418,12 @@ exports.open = function (path, flags, mode, callback) {
                     })
                   }
                 }, function (err) {
-                  // Work around for directory file descriptor
-                  if (err.name === 'TypeMismatchError' || err.name === 'SecurityError') {
+                  if (err.name === 'NotFoundError') {
+                    var enoent = new Error()
+                    enoent.code = 'ENOENT'
+                    callback(enoent)
+                  } else if (err.name === 'TypeMismatchError' || err.name === 'SecurityError') {
+                    // Work around for directory file descriptor
                     // It's a write on a directory
                     if (flags.indexOf('w') > -1) {
                       var eisdir = new Error()
@@ -459,7 +463,6 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
     length = arguments[1]
     buffer = new Buffer(length)
     offset = 0
-
     callback = function (err, bytesRead, data) {
       if (!cb) return
       var str = ''
@@ -471,7 +474,15 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
       (cb)(err, str, bytesRead)
     }
   }
-  fd.onerror = callback
+  fd.onerror = function (err) {
+    if (err.name === 'NotFoundError') {
+      var enoent = new Error()
+      enoent.code = 'ENOENT'
+      callback(enoent)
+    } else {
+      callback(err)
+    }
+  }
   var data = fd.slice(offset, length)
   var fileReader = new FileReader() // eslint-disable-line
   fileReader.onload = function (evt) {
@@ -483,8 +494,14 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
     }
     callback(null, result.length, result)
   }
-  fileReader.onerror = function (evt) {
-    callback(evt, null)
+  fileReader.onerror = function (err) {
+    if (err.name === 'NotFoundError') {
+      var enoent = new Error()
+      enoent.code = 'ENOENT'
+      callback(enoent)
+    } else {
+      callback(err)
+    }
   }
   // no-op the onprogressevent
   fileReader.onprogress = function () {}
@@ -854,10 +871,15 @@ ReadStream.prototype._read = function (n) {
       self.emit('error', err)
     }
     self.push(data)
+    self.once('finish', self.close)
   }
-
-  exports.read(this.fd, new Buffer(this.fd.size), 0, this.fd.size, 0, onread)
-
+  if (this.end === 0) {
+    this.end = this.fd.size
+  }
+  // We need to +1 onto this.end to pass the test :(
+  // I prefer start and off set
+  exports.read(this.fd, new Buffer(this.fd.size), this.start, this.end + 1, 0, onread)
+  // this.once('finish', this.close)
 }
 
 ReadStream.prototype.destroy = function () {
@@ -871,7 +893,6 @@ ReadStream.prototype.destroy = function () {
 
 ReadStream.prototype.close = function (cb) {
   var self = this
-
   if (cb) {
     this.once('close', cb)
   }

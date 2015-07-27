@@ -5958,8 +5958,12 @@ exports.open = function (path, flags, mode, callback) {
                     })
                   }
                 }, function (err) {
-                  // Work around for directory file descriptor
-                  if (err.name === 'TypeMismatchError' || err.name === 'SecurityError') {
+                  if (err.name === 'NotFoundError') {
+                    var enoent = new Error()
+                    enoent.code = 'ENOENT'
+                    callback(enoent)
+                  } else if (err.name === 'TypeMismatchError' || err.name === 'SecurityError') {
+                    // Work around for directory file descriptor
                     // It's a write on a directory
                     if (flags.indexOf('w') > -1) {
                       var eisdir = new Error()
@@ -5999,7 +6003,6 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
     length = arguments[1]
     buffer = new Buffer(length)
     offset = 0
-
     callback = function (err, bytesRead, data) {
       if (!cb) return
       var str = ''
@@ -6011,7 +6014,15 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
       (cb)(err, str, bytesRead)
     }
   }
-  fd.onerror = callback
+  fd.onerror = function (err) {
+    if (err.name === 'NotFoundError') {
+      var enoent = new Error()
+      enoent.code = 'ENOENT'
+      callback(enoent)
+    } else {
+      callback(err)
+    }
+  }
   var data = fd.slice(offset, length)
   var fileReader = new FileReader() // eslint-disable-line
   fileReader.onload = function (evt) {
@@ -6023,8 +6034,14 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
     }
     callback(null, result.length, result)
   }
-  fileReader.onerror = function (evt) {
-    callback(evt, null)
+  fileReader.onerror = function (err) {
+    if (err.name === 'NotFoundError') {
+      var enoent = new Error()
+      enoent.code = 'ENOENT'
+      callback(enoent)
+    } else {
+      callback(err)
+    }
   }
   // no-op the onprogressevent
   fileReader.onprogress = function () {}
@@ -6394,10 +6411,15 @@ ReadStream.prototype._read = function (n) {
       self.emit('error', err)
     }
     self.push(data)
+    self.once('finish', self.close)
   }
-
-  exports.read(this.fd, new Buffer(this.fd.size), 0, this.fd.size, 0, onread)
-
+  if (this.end === 0) {
+    this.end = this.fd.size
+  }
+  // We need to +1 onto this.end to pass the test :(
+  // I prefer start and off set
+  exports.read(this.fd, new Buffer(this.fd.size), this.start, this.end + 1, 0, onread)
+  // this.once('finish', this.close)
 }
 
 ReadStream.prototype.destroy = function () {
@@ -6411,7 +6433,6 @@ ReadStream.prototype.destroy = function () {
 
 ReadStream.prototype.close = function (cb) {
   var self = this
-
   if (cb) {
     this.once('close', cb)
   }
@@ -8007,6 +8028,143 @@ function through (write, end, opts) {
 
 }).call(this,require('_process'))
 },{"_process":12,"stream":24}],42:[function(require,module,exports){
+arguments[4][14][0].apply(exports,arguments)
+},{"./_stream_readable":43,"./_stream_writable":45,"_process":12,"core-util-is":46,"dup":14,"inherits":47}],43:[function(require,module,exports){
+arguments[4][16][0].apply(exports,arguments)
+},{"_process":12,"buffer":3,"core-util-is":46,"dup":16,"events":8,"inherits":47,"isarray":48,"stream":24,"string_decoder/":49}],44:[function(require,module,exports){
+arguments[4][17][0].apply(exports,arguments)
+},{"./_stream_duplex":42,"core-util-is":46,"dup":17,"inherits":47}],45:[function(require,module,exports){
+arguments[4][18][0].apply(exports,arguments)
+},{"./_stream_duplex":42,"_process":12,"buffer":3,"core-util-is":46,"dup":18,"inherits":47,"stream":24}],46:[function(require,module,exports){
+arguments[4][19][0].apply(exports,arguments)
+},{"buffer":3,"dup":19}],47:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"dup":9}],48:[function(require,module,exports){
+arguments[4][10][0].apply(exports,arguments)
+},{"dup":10}],49:[function(require,module,exports){
+arguments[4][25][0].apply(exports,arguments)
+},{"buffer":3,"dup":25}],50:[function(require,module,exports){
+arguments[4][22][0].apply(exports,arguments)
+},{"./lib/_stream_transform.js":44,"dup":22}],51:[function(require,module,exports){
+module.exports = extend
+
+function extend() {
+    var target = {}
+
+    for (var i = 0; i < arguments.length; i++) {
+        var source = arguments[i]
+
+        for (var key in source) {
+            if (source.hasOwnProperty(key)) {
+                target[key] = source[key]
+            }
+        }
+    }
+
+    return target
+}
+
+},{}],52:[function(require,module,exports){
+(function (process){
+var Transform = require('readable-stream/transform')
+  , inherits  = require('util').inherits
+  , xtend     = require('xtend')
+
+function DestroyableTransform(opts) {
+  Transform.call(this, opts)
+  this._destroyed = false
+}
+
+inherits(DestroyableTransform, Transform)
+
+DestroyableTransform.prototype.destroy = function(err) {
+  if (this._destroyed) return
+  this._destroyed = true
+  
+  var self = this
+  process.nextTick(function() {
+    if (err)
+      self.emit('error', err)
+    self.emit('close')
+  })
+}
+
+// a noop _transform function
+function noop (chunk, enc, callback) {
+  callback(null, chunk)
+}
+
+
+// create a new export function, used by both the main export and
+// the .ctor export, contains common logic for dealing with arguments
+function through2 (construct) {
+  return function (options, transform, flush) {
+    if (typeof options == 'function') {
+      flush     = transform
+      transform = options
+      options   = {}
+    }
+
+    if (typeof transform != 'function')
+      transform = noop
+
+    if (typeof flush != 'function')
+      flush = null
+
+    return construct(options, transform, flush)
+  }
+}
+
+
+// main export, just make me a transform stream!
+module.exports = through2(function (options, transform, flush) {
+  var t2 = new DestroyableTransform(options)
+
+  t2._transform = transform
+
+  if (flush)
+    t2._flush = flush
+
+  return t2
+})
+
+
+// make me a reusable prototype that I can `new`, or implicitly `new`
+// with a constructor call
+module.exports.ctor = through2(function (options, transform, flush) {
+  function Through2 (override) {
+    if (!(this instanceof Through2))
+      return new Through2(override)
+
+    this.options = xtend(options, override)
+
+    DestroyableTransform.call(this, this.options)
+  }
+
+  inherits(Through2, DestroyableTransform)
+
+  Through2.prototype._transform = transform
+
+  if (flush)
+    Through2.prototype._flush = flush
+
+  return Through2
+})
+
+
+module.exports.obj = through2(function (options, transform, flush) {
+  var t2 = new DestroyableTransform(xtend({ objectMode: true, highWaterMark: 16 }, options))
+
+  t2._transform = transform
+
+  if (flush)
+    t2._flush = flush
+
+  return t2
+})
+
+}).call(this,require('_process'))
+},{"_process":12,"readable-stream/transform":50,"util":27,"xtend":51}],53:[function(require,module,exports){
 require('../simple/test-fs-stat')
 require('../simple/test-fs-exists')
 require('../simple/test-fs-write-file')
@@ -8023,16 +8181,17 @@ require('../simple/test-fs-empty-read-stream')
 require('../dat-test/mkdir')
 require('../dat-test/rmdir')
 require('../dat-test/write-stream')
+require('../dat-test/read-stream')
 require('../libs/mkdirp-test')
 
-},{"../dat-test/mkdir":44,"../dat-test/rmdir":45,"../dat-test/write-stream":46,"../libs/mkdirp-test":47,"../simple/test-fs-append-file":48,"../simple/test-fs-empty-read-stream":49,"../simple/test-fs-exists":50,"../simple/test-fs-mkdir":51,"../simple/test-fs-read":55,"../simple/test-fs-read-buffer":52,"../simple/test-fs-read-stream":54,"../simple/test-fs-read-stream-fd":53,"../simple/test-fs-readdir":56,"../simple/test-fs-stat":57,"../simple/test-fs-write":60,"../simple/test-fs-write-buffer":58,"../simple/test-fs-write-file":59}],43:[function(require,module,exports){
+},{"../dat-test/mkdir":55,"../dat-test/read-stream":56,"../dat-test/rmdir":57,"../dat-test/write-stream":58,"../libs/mkdirp-test":59,"../simple/test-fs-append-file":60,"../simple/test-fs-empty-read-stream":61,"../simple/test-fs-exists":62,"../simple/test-fs-mkdir":63,"../simple/test-fs-read":67,"../simple/test-fs-read-buffer":64,"../simple/test-fs-read-stream":66,"../simple/test-fs-read-stream-fd":65,"../simple/test-fs-readdir":68,"../simple/test-fs-stat":69,"../simple/test-fs-write":72,"../simple/test-fs-write-buffer":70,"../simple/test-fs-write-file":71}],54:[function(require,module,exports){
 exports.tmpDir = '/'
 exports.error = function (msg) {
   console.log(msg)
 }
 exports.fixturesDir = '/'
 
-},{}],44:[function(require,module,exports){
+},{}],55:[function(require,module,exports){
 var test = require('tape').test
 var fs = require('../../chrome')
 
@@ -8085,7 +8244,77 @@ test('mkdir with modes', function (t) {
   })
 })
 
-},{"../../chrome":28,"tape":30}],45:[function(require,module,exports){
+},{"../../chrome":28,"tape":30}],56:[function(require,module,exports){
+(function (Buffer){
+var test = require('tape').test
+var fs = require('../../chrome')
+var through = require('through2')
+
+test('createReadStream', function (t) {
+  fs.writeFile('/test1.txt', 'hello', function (err) {
+    t.ok(!err, 'Write file error')
+    var rs = fs.createReadStream('/test1.txt')
+    rs.pipe(through(function (chunk, enc, callback) {
+      t.same(chunk, new Buffer('hello'), '/test1.txt contians hello')
+      fs.unlink('/test1.txt', function (err) {
+        t.ok(!err, 'unlinked /test1.txt')
+        t.end()
+        callback()
+      })
+    }))
+  })
+})
+
+test('createReadStream big file', function (t) {
+  var big = new Buffer(100 * 1024)
+
+  fs.writeFile('/test2.txt', big, function (err) {
+    t.ok(!err)
+    var rs = fs.createReadStream('/test2.txt')
+    // We can use through because the file API doesn't stream
+    // so all the data is in through chunck
+    // This will break when seeking is implemented
+    rs.pipe(through(function (chunk, enc, callback) {
+      t.same(chunk, big)
+      fs.unlink('/test2.txt', function (err) {
+        t.ok(!err, 'unlinked /test2.txt')
+        t.end()
+        callback()
+      })
+    }))
+  })
+})
+
+test('createReadStream random access', function (t) {
+  fs.writeFile('/test3.txt', 'hello world', function (err) {
+    t.ok(!err)
+    var rs = fs.createReadStream('/test3.txt', {
+      start: 2,
+      end: 5
+    })
+    rs.pipe(through(function (chunk, enc, callback) {
+      t.same(chunk, new Buffer('llo '))
+      fs.unlink('/test3.txt', function (err) {
+        t.ok(!err, 'unlinked /test3.txt')
+        t.end()
+        callback()
+      })
+    }))
+  })
+})
+
+test('createReadStream enoent', function (t) {
+  var rs = fs.createReadStream('/test123.txt')
+  rs.on('error', function (err) {
+    t.ok(err)
+    t.same(err.code, 'ENOENT')
+    t.ok(true)
+    t.end()
+  })
+})
+
+}).call(this,require("buffer").Buffer)
+},{"../../chrome":28,"buffer":3,"tape":30,"through2":52}],57:[function(require,module,exports){
 var test = require('tape').test
 var fs = require('../../chrome')
 
@@ -8107,7 +8336,7 @@ test('rmdir', function (t) {
   })
 })
 
-},{"../../chrome":28,"tape":30}],46:[function(require,module,exports){
+},{"../../chrome":28,"tape":30}],58:[function(require,module,exports){
 (function (Buffer){
 var fs = require('../../chrome')
 var test = require('tape').test
@@ -8213,7 +8442,7 @@ test('createWriteStream is dir', function (t) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"buffer":3,"tape":30}],47:[function(require,module,exports){
+},{"../../chrome":28,"buffer":3,"tape":30}],59:[function(require,module,exports){
 var fs = require('../../chrome')
 var mkdirp = require('mkdirp')
 var path = '/herp/derp'
@@ -8232,7 +8461,7 @@ mkdirp(path, { 'fs': fs }, function (success) {
   })
 })
 
-},{"../../chrome":28,"assert":2,"mkdirp":29}],48:[function(require,module,exports){
+},{"../../chrome":28,"assert":2,"mkdirp":29}],60:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -8347,7 +8576,7 @@ fs.writeFile(filename3, currentFileData, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],49:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],61:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8421,7 +8650,7 @@ fs.writeFile(emptyFile, '', function (e) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2,"path":11}],50:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],62:[function(require,module,exports){
 var fs = require('../../chrome')
 var assert = require('assert')
 var exists
@@ -8446,7 +8675,7 @@ fs.writeFile(f, 'Some lorum impsum', function () {
   })
 })
 
-},{"../../chrome":28,"assert":2}],51:[function(require,module,exports){
+},{"../../chrome":28,"assert":2}],63:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8504,7 +8733,7 @@ fs.mkdir(pathname2, 511, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2}],52:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2}],64:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8551,7 +8780,7 @@ fs.writeFile(filepath, expected, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],53:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],65:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8608,7 +8837,7 @@ fs.writeFile(file, input, function (e) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2,"path":11}],54:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],66:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8724,6 +8953,7 @@ fs.writeFile(rangeFile, elipses, function (e) {
       if (err) {
         assert.fail(err)
       }
+      assert.equal(2, callbacks.close)
       console.log('test-fs-read-stream-2 success')
     })
   })
@@ -8822,7 +9052,7 @@ process.on('exit', function () {
 })
  */
 
-},{"../../chrome":28,"../common":43,"assert":2,"path":11}],55:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],67:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8868,7 +9098,7 @@ fs.writeFile(filepath, expected, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2,"path":11}],56:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],68:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8939,7 +9169,7 @@ fs.mkdir(readdirDir2, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2,"path":11}],57:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],69:[function(require,module,exports){
 (function (global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -9066,7 +9296,7 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
 })
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../chrome":28,"assert":2}],58:[function(require,module,exports){
+},{"../../chrome":28,"assert":2}],70:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9122,7 +9352,7 @@ fs.open(filename, 'w', '0644', function (err, fd) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],59:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],71:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -9259,7 +9489,7 @@ fs.writeFile(filename3, n, { mode: m }, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"path":11}],60:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],72:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9338,4 +9568,4 @@ function (err, fd) {
   })
 })
 
-},{"../../chrome":28,"../common":43,"assert":2,"buffer":3,"constants":7,"path":11}]},{},[42]);
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"constants":7,"path":11}]},{},[53]);
