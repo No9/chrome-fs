@@ -254,7 +254,15 @@ exports.readdir = function (path, callback) {
             }
             callback(null, fullPathList)
           }, callback)
-        }, callback)
+        }, function (err) {
+          if (err.name === 'NotFoundError') {
+            var enoent = new Error()
+            enoent.code = 'ENOENT'
+            callback(enoent)
+          } else {
+            callback(err)
+          }
+        })
       }, callback)
 }
 
