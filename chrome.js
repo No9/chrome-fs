@@ -17,6 +17,7 @@ var O_RDWR = constants.O_RDWR || 0
 var O_SYNC = constants.O_SYNC || 0
 var O_TRUNC = constants.O_TRUNC || 0
 var O_WRONLY = constants.O_WRONLY || 0
+var fds = {}
 
 window.requestFileSystem = window.requestFileSystem || window.webkitRequestFileSystem
 
@@ -148,20 +149,23 @@ exports.fchmod = function (fd, mode, callback) {
 exports.exists = function (path, callback) {
   if (path === '/') {
     callback(true)
+    return
   }
   path = resolve(path)
   window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
       function (cfs) {
         cfs.root.getFile(path, {},
               function (fileEntry) {
-                callback(true)
+                setTimeout(callback, 0, true)
               }, function () {
                 cfs.root.getDirectory(path, {},
                   function (dirEntry) {
-                    callback(true)
-                  }, function () { callback(false) })
+                    setTimeout(callback, 0, true)
+                  }, function () {
+                      callback(false)
+                    })
               })
-      }, function () { callback(false) })
+      }, function () { setTimeout(callback, 0, false) })
 }
 
 exports.mkdir = function (path, mode, callback) {
@@ -410,10 +414,16 @@ exports.open = function (path, flags, mode, callback) {
                   if (flags.indexOf('w') > -1 || flags.indexOf('a') > -1) {
                     fileEntry.createWriter(function (fileWriter) {
                       fileWriter.fullPath = fileEntry.fullPath
+                      fds[fileWriter.fullPath] = {}
+                      fds[fileWriter.fullPath].status = 'open'
+                      fileWriter.key = fileWriter.fullPath
                       callback(null, fileWriter)
                     }, callback)
                   } else {
                     fileEntry.file(function (file) {
+                      fds[file.fullPath] = {}
+                      fds[file.fullPath].status = 'open'
+                      file.key = file.fullPath
                       callback(null, file)
                     })
                   }
@@ -451,6 +461,14 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
     callback(null, 0, '')
     return
   }
+  if (typeof fds[fd.key] === 'undefined') {
+    fds[fd.key].readpos = 0
+  }
+  if (position !== null) {
+    if (position >= 0) {
+      fds[fd.key].readpos = position
+    }
+  }
   if (!util.isBuffer(buffer)) {
     // fs.read(fd, expected.length, 0, 'utf-8', function (err, str, bytesRead)
     // legacy string interface (fd, length, position, encoding, callback)
@@ -461,7 +479,7 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
 
     position = arguments[2]
     length = arguments[1]
-    buffer = new Buffer(length)
+    // sbuf = new Buffer(length)
     offset = 0
     callback = function (err, bytesRead, data) {
       if (!cb) return
@@ -483,15 +501,20 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
       callback(err)
     }
   }
-  var data = fd.slice(offset, length)
+  if (offset < fds[fd.key].readpos) {
+    offset = fds[fd.key].readpos
+  }
+  var data = fd.slice(offset, offset + length)
   var fileReader = new FileReader() // eslint-disable-line
   fileReader.onload = function (evt) {
     var result
-    if (util.isBuffer(buffer) && typeof this.result === 'string') {
+    if (fd.type === 'text/plain') {
       result = new Buffer(this.result)
     } else {
-      result = this.result
+      result = new Buffer(new Uint8Array(this.result))
     }
+    result.copy(buffer)
+    fds[fd.key].readpos = offset + length
     callback(null, result.length, result)
   }
   fileReader.onerror = function (err) {
@@ -504,11 +527,11 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
     }
   }
   // no-op the onprogressevent
-  fileReader.onprogress = function () {}
-
+  fileReader.onprogress = function () {
+  }
   if (fd.type === 'text/plain') {
     fileReader.readAsText(data)
-  } else if (fd.type === 'application/octet-binary') {
+  } else {
     fileReader.readAsArrayBuffer(data)
   }
 }
@@ -747,9 +770,25 @@ exports.appendFile = function (path, data, options, cb) {
     }, callback)
 }
 
+exports.fsync = function (fd, cb) {
+  if (!cb) cb = function () {}
+  if (typeof fds[fd.fullPath] === 'undefined') {
+    var ebadf = new Error()
+    ebadf.code = 'EBADF'
+    window.setTimeout(cb, 0, ebadf)
+  } else {
+    window.setTimeout(cb, 0)
+  }
+}
+
 exports.close = function (fd, callback) {
+
+  delete fds[fd.fullPath]
+  var cb = makeCallback(callback)
+  if (fd.readyState === 0) {
+    cb(null)
+  }
   fd.onwriteend = function (progressinfo) {
-    var cb = makeCallback(callback)
     cb(null, progressinfo)
   }
 }
@@ -873,12 +912,15 @@ ReadStream.prototype._read = function (n) {
     self.push(data)
     self.once('finish', self.close)
   }
+
+  // calculate the offset so read doesn't carry too much
   if (this.end === 0) {
     this.end = this.fd.size
+  } else {
+    this.end = this.end - this.start + 1
   }
-  // We need to +1 onto this.end to pass the test :(
-  // I prefer start and off set
-  exports.read(this.fd, new Buffer(this.fd.size), this.start, this.end + 1, 0, onread)
+
+  exports.read(this.fd, new Buffer(this.fd.size), this.start, this.end, 0, onread)
   // this.once('finish', this.close)
 }
 

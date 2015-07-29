@@ -5557,6 +5557,7 @@ var O_RDWR = constants.O_RDWR || 0
 var O_SYNC = constants.O_SYNC || 0
 var O_TRUNC = constants.O_TRUNC || 0
 var O_WRONLY = constants.O_WRONLY || 0
+var fds = {}
 
 window.requestFileSystem = window.requestFileSystem || window.webkitRequestFileSystem
 
@@ -5688,20 +5689,23 @@ exports.fchmod = function (fd, mode, callback) {
 exports.exists = function (path, callback) {
   if (path === '/') {
     callback(true)
+    return
   }
   path = resolve(path)
   window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
       function (cfs) {
         cfs.root.getFile(path, {},
               function (fileEntry) {
-                callback(true)
+                setTimeout(callback, 0, true)
               }, function () {
                 cfs.root.getDirectory(path, {},
                   function (dirEntry) {
-                    callback(true)
-                  }, function () { callback(false) })
+                    setTimeout(callback, 0, true)
+                  }, function () {
+                      callback(false)
+                    })
               })
-      }, function () { callback(false) })
+      }, function () { setTimeout(callback, 0, false) })
 }
 
 exports.mkdir = function (path, mode, callback) {
@@ -5950,10 +5954,16 @@ exports.open = function (path, flags, mode, callback) {
                   if (flags.indexOf('w') > -1 || flags.indexOf('a') > -1) {
                     fileEntry.createWriter(function (fileWriter) {
                       fileWriter.fullPath = fileEntry.fullPath
+                      fds[fileWriter.fullPath] = {}
+                      fds[fileWriter.fullPath].status = 'open'
+                      fileWriter.key = fileWriter.fullPath
                       callback(null, fileWriter)
                     }, callback)
                   } else {
                     fileEntry.file(function (file) {
+                      fds[file.fullPath] = {}
+                      fds[file.fullPath].status = 'open'
+                      file.key = file.fullPath
                       callback(null, file)
                     })
                   }
@@ -5991,6 +6001,14 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
     callback(null, 0, '')
     return
   }
+  if (typeof fds[fd.key] === 'undefined') {
+    fds[fd.key].readpos = 0
+  }
+  if (position !== null) {
+    if (position >= 0) {
+      fds[fd.key].readpos = position
+    }
+  }
   if (!util.isBuffer(buffer)) {
     // fs.read(fd, expected.length, 0, 'utf-8', function (err, str, bytesRead)
     // legacy string interface (fd, length, position, encoding, callback)
@@ -6001,7 +6019,7 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
 
     position = arguments[2]
     length = arguments[1]
-    buffer = new Buffer(length)
+    // sbuf = new Buffer(length)
     offset = 0
     callback = function (err, bytesRead, data) {
       if (!cb) return
@@ -6023,15 +6041,20 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
       callback(err)
     }
   }
-  var data = fd.slice(offset, length)
+  if (offset < fds[fd.key].readpos) {
+    offset = fds[fd.key].readpos
+  }
+  var data = fd.slice(offset, offset + length)
   var fileReader = new FileReader() // eslint-disable-line
   fileReader.onload = function (evt) {
     var result
-    if (util.isBuffer(buffer) && typeof this.result === 'string') {
+    if (fd.type === 'text/plain') {
       result = new Buffer(this.result)
     } else {
-      result = this.result
+      result = new Buffer(new Uint8Array(this.result))
     }
+    result.copy(buffer)
+    fds[fd.key].readpos = offset + length
     callback(null, result.length, result)
   }
   fileReader.onerror = function (err) {
@@ -6044,11 +6067,11 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
     }
   }
   // no-op the onprogressevent
-  fileReader.onprogress = function () {}
-
+  fileReader.onprogress = function () {
+  }
   if (fd.type === 'text/plain') {
     fileReader.readAsText(data)
-  } else if (fd.type === 'application/octet-binary') {
+  } else {
     fileReader.readAsArrayBuffer(data)
   }
 }
@@ -6287,9 +6310,25 @@ exports.appendFile = function (path, data, options, cb) {
     }, callback)
 }
 
+exports.fsync = function (fd, cb) {
+  if (!cb) cb = function () {}
+  if (typeof fds[fd.fullPath] === 'undefined') {
+    var ebadf = new Error()
+    ebadf.code = 'EBADF'
+    window.setTimeout(cb, 0, ebadf)
+  } else {
+    window.setTimeout(cb, 0)
+  }
+}
+
 exports.close = function (fd, callback) {
+
+  delete fds[fd.fullPath]
+  var cb = makeCallback(callback)
+  if (fd.readyState === 0) {
+    cb(null)
+  }
   fd.onwriteend = function (progressinfo) {
-    var cb = makeCallback(callback)
     cb(null, progressinfo)
   }
 }
@@ -6413,12 +6452,15 @@ ReadStream.prototype._read = function (n) {
     self.push(data)
     self.once('finish', self.close)
   }
+
+  // calculate the offset so read doesn't carry too much
   if (this.end === 0) {
     this.end = this.fd.size
+  } else {
+    this.end = this.end - this.start + 1
   }
-  // We need to +1 onto this.end to pass the test :(
-  // I prefer start and off set
-  exports.read(this.fd, new Buffer(this.fd.size), this.start, this.end + 1, 0, onread)
+
+  exports.read(this.fd, new Buffer(this.fd.size), this.start, this.end, 0, onread)
   // this.once('finish', this.close)
 }
 
@@ -8182,9 +8224,14 @@ require('../dat-test/mkdir')
 require('../dat-test/rmdir')
 require('../dat-test/write-stream')
 require('../dat-test/read-stream')
+require('../dat-test/append-file')
+require('../dat-test/close')
+require('../dat-test/exists')
+require('../dat-test/open')
+require('../dat-test/read')
 require('../libs/mkdirp-test')
 
-},{"../dat-test/mkdir":55,"../dat-test/read-stream":56,"../dat-test/rmdir":57,"../dat-test/write-stream":58,"../libs/mkdirp-test":59,"../simple/test-fs-append-file":60,"../simple/test-fs-empty-read-stream":61,"../simple/test-fs-exists":62,"../simple/test-fs-mkdir":63,"../simple/test-fs-read":67,"../simple/test-fs-read-buffer":64,"../simple/test-fs-read-stream":66,"../simple/test-fs-read-stream-fd":65,"../simple/test-fs-readdir":68,"../simple/test-fs-stat":69,"../simple/test-fs-write":72,"../simple/test-fs-write-buffer":70,"../simple/test-fs-write-file":71}],54:[function(require,module,exports){
+},{"../dat-test/append-file":55,"../dat-test/close":56,"../dat-test/exists":57,"../dat-test/mkdir":58,"../dat-test/open":59,"../dat-test/read":61,"../dat-test/read-stream":60,"../dat-test/rmdir":62,"../dat-test/write-stream":63,"../libs/mkdirp-test":64,"../simple/test-fs-append-file":65,"../simple/test-fs-empty-read-stream":66,"../simple/test-fs-exists":67,"../simple/test-fs-mkdir":68,"../simple/test-fs-read":72,"../simple/test-fs-read-buffer":69,"../simple/test-fs-read-stream":71,"../simple/test-fs-read-stream-fd":70,"../simple/test-fs-readdir":73,"../simple/test-fs-stat":74,"../simple/test-fs-write":77,"../simple/test-fs-write-buffer":75,"../simple/test-fs-write-file":76}],54:[function(require,module,exports){
 exports.tmpDir = '/'
 exports.error = function (msg) {
   console.log(msg)
@@ -8192,6 +8239,70 @@ exports.error = function (msg) {
 exports.fixturesDir = '/'
 
 },{}],55:[function(require,module,exports){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('appendFile', function (t) {
+  fs.writeFile('/test.txt', 'hello', function (err) {
+    t.notOk(err)
+    fs.appendFile('/test.txt', ' world', function (err) {
+      t.notOk(err)
+      fs.readFile('/test.txt', function (err, data) {
+        t.notOk(err)
+        t.same(data.toString(), 'hello world')
+        fs.unlink('/test.txt', function (err) {
+          t.ok(!err, 'unlinked /test.txt')
+          t.end()
+        })
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"tape":30}],56:[function(require,module,exports){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('close', function (t) {
+  fs.open('/testclose', 'w', function (err, fd) {
+    t.ok(!err)
+    fs.close(fd, function (err) {
+      t.ok(!err)
+      fs.fsync(fd, function (err) {
+        t.ok(err)
+        t.same(err.code, 'EBADF')
+        fs.unlink('/testclose', function (err) {
+          t.ok(!err)
+          t.end()
+        })
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"tape":30}],57:[function(require,module,exports){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('exists', function (t) {
+  fs.exists('/', function (exists) {
+    t.ok(exists, '/ exists')
+    fs.exists('/foox', function (exists) {
+      t.notOk(exists, '/foox does not exist')
+      fs.mkdir('/foox', function () {
+        fs.exists('/foox', function (exists) {
+          t.ok(exists, '/foox exists second')
+          fs.rmdir('/foox', function (err) {
+            t.ok(!err, 'rmdir /foox')
+            t.end()
+          })
+        })
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"tape":30}],58:[function(require,module,exports){
 var test = require('tape').test
 var fs = require('../../chrome')
 
@@ -8244,7 +8355,52 @@ test('mkdir with modes', function (t) {
   })
 })
 
-},{"../../chrome":28,"tape":30}],56:[function(require,module,exports){
+},{"../../chrome":28,"tape":30}],59:[function(require,module,exports){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('openfs', function (t) {
+  fs.open('/testo1.txt', 'w', function (err, fd) {
+    t.ok(!err)
+    t.same(typeof fd, 'object')
+    fs.unlink('/testo1.txt', function (err) {
+      t.ok(!err)
+      t.end()
+    })
+  })
+})
+
+test('open not exist', function (t) {
+  fs.open('/test2', 'r', function (err, fd) {
+    t.ok(err)
+    t.same(err.code, 'ENOENT')
+    fs.open('/test2', 'w', function (err, fd) {
+      t.ok(!err)
+      t.same(typeof fd, 'object')
+      fs.unlink('/test2', function (err) {
+        t.ok(!err)
+        t.end()
+      })
+    })
+  })
+})
+
+test('open w+', function (t) {
+  fs.open('/test3', 'w+', function (err, fd) {
+    t.ok(!err)
+    t.same(typeof fd, 'object')
+
+    fs.stat('/test3', function (err, stat) {
+      t.ok(!err)
+      fs.unlink('/test3', function (err) {
+        t.ok(!err)
+        t.end()
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"tape":30}],60:[function(require,module,exports){
 (function (Buffer){
 var test = require('tape').test
 var fs = require('../../chrome')
@@ -8286,16 +8442,16 @@ test('createReadStream big file', function (t) {
 })
 
 test('createReadStream random access', function (t) {
-  fs.writeFile('/test3.txt', 'hello world', function (err) {
+  fs.writeFile('/testra.txt', 'hello world', function (err) {
     t.ok(!err)
-    var rs = fs.createReadStream('/test3.txt', {
+    var rs = fs.createReadStream('/testra.txt', {
       start: 2,
       end: 5
     })
     rs.pipe(through(function (chunk, enc, callback) {
       t.same(chunk, new Buffer('llo '))
-      fs.unlink('/test3.txt', function (err) {
-        t.ok(!err, 'unlinked /test3.txt')
+      fs.unlink('/testra.txt', function (err) {
+        t.ok(!err, 'unlinked /testra.txt')
         t.end()
         callback()
       })
@@ -8314,7 +8470,60 @@ test('createReadStream enoent', function (t) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"buffer":3,"tape":30,"through2":52}],57:[function(require,module,exports){
+},{"../../chrome":28,"buffer":3,"tape":30,"through2":52}],61:[function(require,module,exports){
+(function (Buffer){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('read', function (t) {
+  fs.writeFile('/testread', 'hello worldy world', function (err) {
+    t.ok(!err, 'no error on write file')
+    fs.open('/testread', 'r', function (err, fd) {
+      t.ok(!err, 'no error on open')
+      var b = new Buffer(1024)
+      fs.read(fd, b, 0, 11, null, function (err, read) {
+        t.ok(!err, 'no error on read')
+        t.same(read, 11, 'read length is correct')
+        t.same(b.slice(0, 11), new Buffer('hello world'), 'buffer says hello world')
+        fs.read(fd, b, 0, 11, null, function (err, read) {
+          t.ok(!err, 'second read has no error')
+          t.same(read, 7, 'second read length is correct')
+          t.same(b.slice(0, 11), new Buffer('y worldorld'), 'second read text is correct')
+          fs.unlink('/testread', function (err) {
+            t.ok(!err)
+            t.end()
+          })
+        })
+      })
+    })
+  })
+})
+
+test('read test 2', function (t) {
+  fs.writeFile('/testread2', 'hello worldy world', function () {
+    fs.open('/testread2', 'r', function (err, fd) {
+      t.ok(!err)
+      var b = new Buffer(1024)
+      fs.read(fd, b, 0, 11, 0, function (err, read) {
+        t.ok(!err, 'no error on read')
+        t.same(read, 11, 'read length is correct')
+        t.same(b.slice(0, 11), new Buffer('hello world'), 'read hello world')
+        fs.read(fd, b, 0, 11, 1, function (err, read) {
+          t.ok(!err, 'no error on second read')
+          t.same(read, 11, 'second read length 11')
+          t.same(b.slice(0, 11), new Buffer('ello worldy'), 'second read data is the same')
+          fs.unlink('/testread2', function (err) {
+            t.ok(!err)
+            t.end()
+          })
+        })
+      })
+    })
+  })
+})
+
+}).call(this,require("buffer").Buffer)
+},{"../../chrome":28,"buffer":3,"tape":30}],62:[function(require,module,exports){
 var test = require('tape').test
 var fs = require('../../chrome')
 
@@ -8336,7 +8545,7 @@ test('rmdir', function (t) {
   })
 })
 
-},{"../../chrome":28,"tape":30}],58:[function(require,module,exports){
+},{"../../chrome":28,"tape":30}],63:[function(require,module,exports){
 (function (Buffer){
 var fs = require('../../chrome')
 var test = require('tape').test
@@ -8442,7 +8651,7 @@ test('createWriteStream is dir', function (t) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"buffer":3,"tape":30}],59:[function(require,module,exports){
+},{"../../chrome":28,"buffer":3,"tape":30}],64:[function(require,module,exports){
 var fs = require('../../chrome')
 var mkdirp = require('mkdirp')
 var path = '/herp/derp'
@@ -8461,7 +8670,7 @@ mkdirp(path, { 'fs': fs }, function (success) {
   })
 })
 
-},{"../../chrome":28,"assert":2,"mkdirp":29}],60:[function(require,module,exports){
+},{"../../chrome":28,"assert":2,"mkdirp":29}],65:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -8576,7 +8785,7 @@ fs.writeFile(filename3, currentFileData, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],61:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],66:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8650,7 +8859,7 @@ fs.writeFile(emptyFile, '', function (e) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],62:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],67:[function(require,module,exports){
 var fs = require('../../chrome')
 var assert = require('assert')
 var exists
@@ -8675,7 +8884,7 @@ fs.writeFile(f, 'Some lorum impsum', function () {
   })
 })
 
-},{"../../chrome":28,"assert":2}],63:[function(require,module,exports){
+},{"../../chrome":28,"assert":2}],68:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8733,7 +8942,7 @@ fs.mkdir(pathname2, 511, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2}],64:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2}],69:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8780,7 +8989,7 @@ fs.writeFile(filepath, expected, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],65:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],70:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8837,7 +9046,7 @@ fs.writeFile(file, input, function (e) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],66:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],71:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9052,7 +9261,7 @@ process.on('exit', function () {
 })
  */
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],67:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],72:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9098,7 +9307,7 @@ fs.writeFile(filepath, expected, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],68:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],73:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9169,7 +9378,7 @@ fs.mkdir(readdirDir2, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],69:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],74:[function(require,module,exports){
 (function (global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -9296,7 +9505,7 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
 })
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../chrome":28,"assert":2}],70:[function(require,module,exports){
+},{"../../chrome":28,"assert":2}],75:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9352,7 +9561,7 @@ fs.open(filename, 'w', '0644', function (err, fd) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],71:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],76:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -9489,7 +9698,7 @@ fs.writeFile(filename3, n, { mode: m }, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],72:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],77:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a

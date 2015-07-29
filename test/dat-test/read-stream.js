@@ -38,16 +38,16 @@ test('createReadStream big file', function (t) {
 })
 
 test('createReadStream random access', function (t) {
-  fs.writeFile('/test3.txt', 'hello world', function (err) {
+  fs.writeFile('/testra.txt', 'hello world', function (err) {
     t.ok(!err)
-    var rs = fs.createReadStream('/test3.txt', {
+    var rs = fs.createReadStream('/testra.txt', {
       start: 2,
       end: 5
     })
     rs.pipe(through(function (chunk, enc, callback) {
       t.same(chunk, new Buffer('llo '))
-      fs.unlink('/test3.txt', function (err) {
-        t.ok(!err, 'unlinked /test3.txt')
+      fs.unlink('/testra.txt', function (err) {
+        t.ok(!err, 'unlinked /testra.txt')
         t.end()
         callback()
       })
