@@ -5601,7 +5601,7 @@ function rethrow () {
     return function (err) {
       if (err) {
         backtrace.stack = err.name + ': ' + err.message +
-                          backtrace.stack.substr(backtrace.name.length)
+          backtrace.stack.substr(backtrace.name.length)
         err = backtrace
         throw err
       }
@@ -5693,19 +5693,19 @@ exports.exists = function (path, callback) {
   }
   path = resolve(path)
   window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
-      function (cfs) {
-        cfs.root.getFile(path, {},
-              function (fileEntry) {
-                setTimeout(callback, 0, true)
-              }, function () {
-                cfs.root.getDirectory(path, {},
-                  function (dirEntry) {
-                    setTimeout(callback, 0, true)
-                  }, function () {
-                      callback(false)
-                    })
-              })
-      }, function () { setTimeout(callback, 0, false) })
+    function (cfs) {
+      cfs.root.getFile(path, {},
+        function (fileEntry) {
+          setTimeout(callback, 0, true)
+        }, function () {
+          cfs.root.getDirectory(path, {},
+            function (dirEntry) {
+              setTimeout(callback, 0, true)
+            }, function () {
+              callback(false)
+            })
+        })
+    }, function () { setTimeout(callback, 0, false) })
 }
 
 exports.mkdir = function (path, mode, callback) {
@@ -5726,9 +5726,9 @@ exports.mkdir = function (path, mode, callback) {
           window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
             function (cfs) {
               cfs.root.getDirectory(path, {create: true},
-                    function (dirEntry) {
-                      callback()
-                    }, callback)
+                function (dirEntry) {
+                  setTimeout(callback, 0)
+                }, callback)
             }, callback)
         } else {
           var enoent = new Error()
@@ -5753,57 +5753,57 @@ exports.rmdir = function (path, callback) {
   if (!nullCheck(path, callback)) return
 
   window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
-      function (cfs) {
-        cfs.root.getDirectory(path, {},
-              function (dirEntry) {
-                dirEntry.remove(function () {
-                  callback()
-                }, function (err) {
-                    if (err.name === 'NotFoundError') {
-                      var entryerr = new Error()
-                      entryerr.code = 'ENOENT'
-                      entryerr.path = path
-                      callback(entryerr)
-                    } else {
-                      callback(err)
-                    }
-                  })
-              }, function (err) {
-                    if (err.name === 'NotFoundError') {
-                      var entryerr = new Error()
-                      entryerr.code = 'ENOENT'
-                      entryerr.path = path
-                      callback(entryerr)
-                    } else {
-                      callback(err)
-                    }
-                  })
-      }, callback)
+    function (cfs) {
+      cfs.root.getDirectory(path, {},
+        function (dirEntry) {
+          dirEntry.remove(function () {
+            callback()
+          }, function (err) {
+            if (err.name === 'NotFoundError') {
+              var entryerr = new Error()
+              entryerr.code = 'ENOENT'
+              entryerr.path = path
+              callback(entryerr)
+            } else {
+              callback(err)
+            }
+          })
+        }, function (err) {
+          if (err.name === 'NotFoundError') {
+            var entryerr = new Error()
+            entryerr.code = 'ENOENT'
+            entryerr.path = path
+            callback(entryerr)
+          } else {
+            callback(err)
+          }
+        })
+    }, callback)
 }
 
 exports.readdir = function (path, callback) {
   resolve(path)
   window.requestFileSystem(window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
-      function (cfs) {
-        cfs.root.getDirectory(path, {}, function (dirEntry) {
-          var dirReader = dirEntry.createReader()
-          dirReader.readEntries(function (entries) {
-            var fullPathList = []
-            for (var i = 0; i < entries.length; i++) {
-              fullPathList.push(entries[i].name)
-            }
-            callback(null, fullPathList)
-          }, callback)
-        }, function (err) {
-          if (err.name === 'NotFoundError') {
-            var enoent = new Error()
-            enoent.code = 'ENOENT'
-            callback(enoent)
-          } else {
-            callback(err)
+    function (cfs) {
+      cfs.root.getDirectory(path, {}, function (dirEntry) {
+        var dirReader = dirEntry.createReader()
+        dirReader.readEntries(function (entries) {
+          var fullPathList = []
+          for (var i = 0; i < entries.length; i++) {
+            fullPathList.push(entries[i].name)
           }
-        })
-      }, callback)
+          callback(null, fullPathList)
+        }, callback)
+      }, function (err) {
+        if (err.name === 'NotFoundError') {
+          var enoent = new Error()
+          enoent.code = 'ENOENT'
+          callback(enoent)
+        } else {
+          callback(err)
+        }
+      })
+    }, callback)
 }
 
 exports.rename = function (oldPath, newPath, callback) {
@@ -5816,28 +5816,52 @@ exports.rename = function (oldPath, newPath, callback) {
   if (!nullCheck(newPath, callback)) {
     return
   }
+  // Some shennanigans here as folks rename and move
+  // at the same time :/
+  // First we strip the prefixed /
   oldPath = resolve(oldPath)
   newPath = resolve(newPath)
-  var tmpPath = newPath.split('/')
-  var newFileName = tmpPath.pop()
-  var toDirectory = tmpPath.join('/')
-  if (toDirectory === '') {
-    toDirectory = '/'
-  }
 
+  // Then we split the new location to get the name and the too directory
+  var tmpPath = newPath.split('/')
+  var newName = tmpPath.pop()
+  // if the directory happens to be root then we need to supply
+  // a / because gooogle devs
+  var toDirectory = tmpPath.join('/')
+
+  // Leaving us with oldPath the toDirectory and newName
   window.requestFileSystem(
-      window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
-      function (cfs) {
-        cfs.root.getFile(oldPath, {},
-              function (fileEntry) {
-                fileEntry.onerror = callback
-                cfs.root.getDirectory(toDirectory, {}, function (dirEntry) {
-                  fileEntry.moveTo(dirEntry, newFileName)
-                  callback()
-                }, callback)
-                fileEntry.moveTo(toDirectory, newFileName, callback)
-              }, callback)
-      }, callback)
+    window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+    function (cfs) {
+      // If root is / then we need a pointer to the root dir?
+      // Think this needs a couple of sun dir tests
+      if (toDirectory === '') {
+        toDirectory = cfs.root
+      }
+      cfs.root.getFile(oldPath, {},
+        function (fileEntry) {
+          fileEntry.onerror = callback
+
+          cfs.root.getDirectory(toDirectory, {}, function (dirEntry) {
+            fileEntry.moveTo(dirEntry, newName)
+            callback()
+          }, callback)
+          fileEntry.moveTo(toDirectory, newName, callback)
+        }, function (err) {
+          // we need to move the directory instead
+          if (err.name === 'TypeMismatchError') {
+            cfs.root.getDirectory('/' + oldPath, {}, function (dirEntry) {
+              dirEntry.moveTo(toDirectory, newName, function () {
+                callback()
+              }, function (err) {
+                callback(err)
+              })
+            })
+          } else {
+            callback(err)
+          }
+        })
+    }, callback)
 }
 
 exports.ftruncate = function (fd, len, callback) {
@@ -5875,61 +5899,61 @@ exports.truncate = function (path, len, callback) {
 exports.stat = function (path, callback) {
   path = resolve(path)
   window.requestFileSystem(
-        window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
-        function (cfs) {
-          var opts = {}
-          cfs.root.getFile(path, opts, function (fileEntry) {
-            fileEntry.file(function (file) {
-              var statval = { dev: 0,
-                              mode: '0777',
-                              nlink: 0,
-                              uid: 0,
-                              gid: 0,
-                              rdev: 0,
-                              ino: 0,
-                              size: file.size,
-                              atime: null,
-                              mtime: file.lastModifiedDate,
-                              ctime: null }
-              statval.isDirectory = function () { return false }
-              statval.isFile = function () { return true }
-              statval.isSocket = function () { return false }
-              statval.isBlockDevice = function () { return false }
-              statval.isCharacterDevice = function () { return false }
-              statval.isFIFO = function () { return false }
-              statval.isSymbolicLink = function () { return false }
-              callback(null, statval)
-            })
-          }, function (err) {
-            if (err.name === 'TypeMismatchError') {
-              cfs.root.getDirectory(path, opts, function (dirEntry) {
-               var statval = { dev: 0,
-                                mode: '0777',
-                                nlink: 0,
-                                uid: 0,
-                                gid: 0,
-                                rdev: 0,
-                                ino: 0,
-                                size: 0,
-                                atime: null,
-                                mtime: new Date(0),
-                                ctime: null,
-                                blksize: -1,
-                                blocks: -1 }
-               statval.isDirectory = function () { return true }
-               statval.isFile = function () { return false }
-               statval.isSocket = function () { return false }
-               statval.isBlockDevice = function () { return false }
-               statval.isCharacterDevice = function () { return false }
-               statval.isFIFO = function () { return false }
-               statval.isSymbolicLink = function () { return false }
-               callback(null, statval)
-             })
-            } else {
-              callback(err)
-            }
+    window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+    function (cfs) {
+      var opts = {}
+      cfs.root.getFile(path, opts, function (fileEntry) {
+        fileEntry.file(function (file) {
+          var statval = { dev: 0,
+            mode: '0777',
+            nlink: 0,
+            uid: 0,
+            gid: 0,
+            rdev: 0,
+            ino: 0,
+            size: file.size,
+            atime: null,
+            mtime: file.lastModifiedDate,
+          ctime: null }
+          statval.isDirectory = function () { return false }
+          statval.isFile = function () { return true }
+          statval.isSocket = function () { return false }
+          statval.isBlockDevice = function () { return false }
+          statval.isCharacterDevice = function () { return false }
+          statval.isFIFO = function () { return false }
+          statval.isSymbolicLink = function () { return false }
+          callback(null, statval)
+        })
+      }, function (err) {
+        if (err.name === 'TypeMismatchError') {
+          cfs.root.getDirectory(path, opts, function (dirEntry) {
+            var statval = { dev: 0,
+              mode: '0777',
+              nlink: 0,
+              uid: 0,
+              gid: 0,
+              rdev: 0,
+              ino: 0,
+              size: 0,
+              atime: null,
+              mtime: new Date(0),
+              ctime: null,
+              blksize: -1,
+            blocks: -1 }
+            statval.isDirectory = function () { return true }
+            statval.isFile = function () { return false }
+            statval.isSocket = function () { return false }
+            statval.isBlockDevice = function () { return false }
+            statval.isCharacterDevice = function () { return false }
+            statval.isFIFO = function () { return false }
+            statval.isSymbolicLink = function () { return false }
+            callback(null, statval)
           })
-        }, callback)
+        } else {
+          callback(err)
+        }
+      })
+    }, callback)
 }
 
 exports.fstat = function (fd, callback) {
@@ -5944,64 +5968,64 @@ exports.open = function (path, flags, mode, callback) {
 
   if (!nullCheck(path, callback)) return
   window.requestFileSystem(
-        window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
-        function (cfs) {
-          var opts = {}
-          if (flags.indexOf('w') > -1) {
-            opts = {create: true}
+    window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+    function (cfs) {
+      var opts = {}
+      if (flags.indexOf('w') > -1) {
+        opts = {create: true}
+      }
+      if (flags.indexOf('x') > -1) {
+        opts.exclusive = true
+      }
+      cfs.root.getFile(
+        path,
+        opts,
+        function (fileEntry) {
+          // if its a write then we get the file writer
+          // otherwise we get the file because 'standards'
+          if (flags.indexOf('w') > -1 || flags.indexOf('a') > -1) {
+            fileEntry.createWriter(function (fileWriter) {
+              fileWriter.fullPath = fileEntry.fullPath
+              fds[fileWriter.fullPath] = {}
+              fds[fileWriter.fullPath].status = 'open'
+              fileWriter.key = fileWriter.fullPath
+              callback(null, fileWriter)
+            }, callback)
+          } else {
+            fileEntry.file(function (file) {
+              fds[file.fullPath] = {}
+              fds[file.fullPath].status = 'open'
+              file.key = file.fullPath
+              callback(null, file)
+            })
           }
-          if (flags.indexOf('x') > -1) {
-            opts.exclusive = true
-          }
-          cfs.root.getFile(
-                path,
-                opts,
-                function (fileEntry) {
-                  // if its a write then we get the file writer
-                  // otherwise we get the file because 'standards'
-                  if (flags.indexOf('w') > -1 || flags.indexOf('a') > -1) {
-                    fileEntry.createWriter(function (fileWriter) {
-                      fileWriter.fullPath = fileEntry.fullPath
-                      fds[fileWriter.fullPath] = {}
-                      fds[fileWriter.fullPath].status = 'open'
-                      fileWriter.key = fileWriter.fullPath
-                      callback(null, fileWriter)
-                    }, callback)
-                  } else {
-                    fileEntry.file(function (file) {
-                      fds[file.fullPath] = {}
-                      fds[file.fullPath].status = 'open'
-                      file.key = file.fullPath
-                      callback(null, file)
-                    })
-                  }
-                }, function (err) {
-                  if (err.name === 'NotFoundError') {
-                    var enoent = new Error()
-                    enoent.code = 'ENOENT'
-                    callback(enoent)
-                  } else if (err.name === 'TypeMismatchError' || err.name === 'SecurityError') {
-                    // Work around for directory file descriptor
-                    // It's a write on a directory
-                    if (flags.indexOf('w') > -1) {
-                      var eisdir = new Error()
-                      eisdir.code = 'EISDIR'
-                      callback(eisdir)
-                    } else {
-                      var dird = {}
-                      dird.filePath = path
-                      callback(null, dird)
-                    }
+        }, function (err) {
+          if (err.name === 'NotFoundError') {
+            var enoent = new Error()
+            enoent.code = 'ENOENT'
+            callback(enoent)
+          } else if (err.name === 'TypeMismatchError' || err.name === 'SecurityError') {
+            // Work around for directory file descriptor
+            // It's a write on a directory
+            if (flags.indexOf('w') > -1) {
+              var eisdir = new Error()
+              eisdir.code = 'EISDIR'
+              callback(eisdir)
+            } else {
+              var dird = {}
+              dird.filePath = path
+              callback(null, dird)
+            }
 
-                  } else if (err.name === 'InvalidModificationError') {
-                    var eexists = new Error()
-                    eexists.code = 'EEXIST'
-                    callback(eexists)
-                  } else {
-                    callback(err)
-                  }
-                })
-        }, callback)
+          } else if (err.name === 'InvalidModificationError') {
+            var eexists = new Error()
+            eexists.code = 'EEXIST'
+            callback(eexists)
+          } else {
+            callback(err)
+          }
+        })
+    }, callback)
 }
 
 exports.read = function (fd, buffer, offset, length, position, callback) {
@@ -6075,8 +6099,7 @@ exports.read = function (fd, buffer, offset, length, position, callback) {
     }
   }
   // no-op the onprogressevent
-  fileReader.onprogress = function () {
-  }
+  fileReader.onprogress = function () {}
   if (fd.type === 'text/plain') {
     fileReader.readAsText(data)
   } else {
@@ -6098,35 +6121,35 @@ exports.readFile = function (path, options, cb) {
   var encoding = options.encoding
   assertEncoding(encoding)
   window.requestFileSystem(
-      window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
-      function (cfs) {
-        var opts = {}
-        cfs.root.getFile(
-              path,
-              opts,
-              function (fileEntry) {
-                fileEntry.file(function (file) {
-                  fileEntry.onerror = callback
-                  var fileReader = new FileReader() // eslint-disable-line
-                  fileReader.onload = function (evt) {
-                    if (options.encoding === null) {
-                      window.setTimeout(callback, 0, null, new Buffer(this.result, 'binary'))
-                    } else {
-                      window.setTimeout(callback, 0, null, this.result)
-                    }
-                  }
-                  fileReader.onerror = function (evt) {
-                    callback(evt, null)
-                  }
+    window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
+    function (cfs) {
+      var opts = {}
+      cfs.root.getFile(
+        path,
+        opts,
+        function (fileEntry) {
+          fileEntry.file(function (file) {
+            fileEntry.onerror = callback
+            var fileReader = new FileReader() // eslint-disable-line
+            fileReader.onload = function (evt) {
+              if (options.encoding === null) {
+                window.setTimeout(callback, 0, null, new Buffer(this.result, 'binary'))
+              } else {
+                window.setTimeout(callback, 0, null, this.result)
+              }
+            }
+            fileReader.onerror = function (evt) {
+              callback(evt, null)
+            }
 
-                  if (file.type === 'text/plain') {
-                    fileReader.readAsText(file)
-                  } else if (file.type === 'application/octet-binary') {
-                    fileReader.readAsArrayBuffer(file)
-                  }
-                })
-              }, callback)
-      }, callback)
+            if (file.type === 'text/plain') {
+              fileReader.readAsText(file)
+            } else if (file.type === 'application/octet-binary') {
+              fileReader.readAsArrayBuffer(file)
+            }
+          })
+        }, callback)
+    }, callback)
 }
 
 exports.write = function (fd, buffer, offset, length, position, callback) {
@@ -6203,11 +6226,11 @@ exports.unlink = function (fd, callback) {
         window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
         function (cfs) {
           cfs.root.getFile(
-                path,
-                {},
-                function (fileEntry) {
-                  fileEntry.remove(callback)
-                })
+            path,
+            {},
+            function (fileEntry) {
+              fileEntry.remove(callback)
+            })
         }, callback)
     } else {
       var enoent = new Error()
@@ -6240,33 +6263,33 @@ exports.writeFile = function (path, data, options, cb) {
         opts = {create: true}
       }
       cfs.root.getFile(
-            path,
-            opts,
-            function (fileEntry) {
-              // if its a write then we get the file writer
-              // otherwise we get the file because 'standards'
-              if (flag === 'w') {
-                fileEntry.createWriter(function (fileWriter) {
-                  fileWriter.onerror = callback
-                  if (typeof callback === 'function') {
-                    fileWriter.onwriteend = function (evt) {
-                      window.setTimeout(callback, 0, null, evt)
-                    }
-                  } else {
-                    fileWriter.onwriteend = function () {}
-                  }
-                  fileWriter.onprogress = function () {}
-                  var blob = new Blob([data], {type: 'text/plain'}) // eslint-disable-line
-                  fileWriter.write(blob)
-                }, function (evt) {
-                     if (evt.type !== 'writeend') {
-                       callback(evt)
-                     }
-                   })
+        path,
+        opts,
+        function (fileEntry) {
+          // if its a write then we get the file writer
+          // otherwise we get the file because 'standards'
+          if (flag === 'w') {
+            fileEntry.createWriter(function (fileWriter) {
+              fileWriter.onerror = callback
+              if (typeof callback === 'function') {
+                fileWriter.onwriteend = function (evt) {
+                  window.setTimeout(callback, 0, null, evt)
+                }
               } else {
-                callback('incorrect flag')
+                fileWriter.onwriteend = function () {}
               }
-            }, function () {})
+              fileWriter.onprogress = function () {}
+              var blob = new Blob([data], {type: 'text/plain'}) // eslint-disable-line
+              fileWriter.write(blob)
+            }, function (evt) {
+              if (evt.type !== 'writeend') {
+                callback(evt)
+              }
+            })
+          } else {
+            callback('incorrect flag')
+          }
+        }, function () {})
     }, callback)
 }
 
@@ -6291,30 +6314,30 @@ exports.appendFile = function (path, data, options, cb) {
         opts = {create: true}
       }
       cfs.root.getFile(
-            path,
-            opts,
-            function (fileEntry) {
-              // if its a write then we get the file writer
-              // otherwise we get the file because 'standards'
-              if (flag === 'a') {
-                fileEntry.createWriter(function (fileWriter) {
-                  fileWriter.onerror = callback
-                  if (typeof callback === 'function') {
-                    fileWriter.onwriteend = function (evt) {
-                      window.setTimeout(callback, 0, null, evt)
-                    }
-                  } else {
-                    fileWriter.onwriteend = function () {}
-                  }
-                  fileWriter.onprogress = function () {}
-                  fileWriter.seek(fileWriter.length)
-                  var blob = new Blob([data], {type: 'text/plain'}) // eslint-disable-line
-                  fileWriter.write(blob)
-                }, callback)
+        path,
+        opts,
+        function (fileEntry) {
+          // if its a write then we get the file writer
+          // otherwise we get the file because 'standards'
+          if (flag === 'a') {
+            fileEntry.createWriter(function (fileWriter) {
+              fileWriter.onerror = callback
+              if (typeof callback === 'function') {
+                fileWriter.onwriteend = function (evt) {
+                  window.setTimeout(callback, 0, null, evt)
+                }
               } else {
-                callback('incorrect flag')
+                fileWriter.onwriteend = function () {}
               }
+              fileWriter.onprogress = function () {}
+              fileWriter.seek(fileWriter.length)
+              var blob = new Blob([data], {type: 'text/plain'}) // eslint-disable-line
+              fileWriter.write(blob)
             }, callback)
+          } else {
+            callback('incorrect flag')
+          }
+        }, callback)
     }, callback)
 }
 
@@ -6330,7 +6353,6 @@ exports.fsync = function (fd, cb) {
 }
 
 exports.close = function (fd, callback) {
-
   delete fds[fd.fullPath]
   var cb = makeCallback(callback)
   if (fd.readyState === 0) {
@@ -6368,7 +6390,7 @@ function ReadStream (path, options) {
   this.start = options.hasOwnProperty('start') ? options.start : 0
   this.end = options.hasOwnProperty('end') ? options.end : 0
   this.autoClose = options.hasOwnProperty('autoClose') ?
-      options.autoClose : true
+    options.autoClose : true
   this.pos = undefined
 
   if (!util.isUndefined(this.start)) {
@@ -6469,7 +6491,7 @@ ReadStream.prototype._read = function (n) {
   }
 
   exports.read(this.fd, new Buffer(this.fd.size), this.start, this.end, 0, onread)
-  // this.once('finish', this.close)
+// this.once('finish', this.close)
 }
 
 ReadStream.prototype.destroy = function () {
@@ -8238,9 +8260,10 @@ require('../dat-test/exists')
 require('../dat-test/open')
 require('../dat-test/read')
 require('../dat-test/readdir')
+require('../dat-test/rename')
 require('../libs/mkdirp-test')
 
-},{"../dat-test/append-file":55,"../dat-test/close":56,"../dat-test/exists":57,"../dat-test/mkdir":58,"../dat-test/open":59,"../dat-test/read":61,"../dat-test/read-stream":60,"../dat-test/readdir":62,"../dat-test/rmdir":63,"../dat-test/write-stream":64,"../libs/mkdirp-test":65,"../simple/test-fs-append-file":66,"../simple/test-fs-empty-read-stream":67,"../simple/test-fs-exists":68,"../simple/test-fs-mkdir":69,"../simple/test-fs-read":73,"../simple/test-fs-read-buffer":70,"../simple/test-fs-read-stream":72,"../simple/test-fs-read-stream-fd":71,"../simple/test-fs-readdir":74,"../simple/test-fs-stat":75,"../simple/test-fs-write":78,"../simple/test-fs-write-buffer":76,"../simple/test-fs-write-file":77}],54:[function(require,module,exports){
+},{"../dat-test/append-file":55,"../dat-test/close":56,"../dat-test/exists":57,"../dat-test/mkdir":58,"../dat-test/open":59,"../dat-test/read":61,"../dat-test/read-stream":60,"../dat-test/readdir":62,"../dat-test/rename":63,"../dat-test/rmdir":64,"../dat-test/write-stream":65,"../libs/mkdirp-test":66,"../simple/test-fs-append-file":67,"../simple/test-fs-empty-read-stream":68,"../simple/test-fs-exists":69,"../simple/test-fs-mkdir":70,"../simple/test-fs-read":74,"../simple/test-fs-read-buffer":71,"../simple/test-fs-read-stream":73,"../simple/test-fs-read-stream-fd":72,"../simple/test-fs-readdir":75,"../simple/test-fs-stat":76,"../simple/test-fs-write":79,"../simple/test-fs-write-buffer":77,"../simple/test-fs-write-file":78}],54:[function(require,module,exports){
 exports.tmpDir = '/'
 exports.error = function (msg) {
   console.log(msg)
@@ -8597,6 +8620,46 @@ test('readdir not recursive', function (t) {
 var test = require('tape').test
 var fs = require('../../chrome')
 
+test('rename', function (t) {
+  fs.mkdir('/foo', function () {
+    fs.rename('/foo', '/bar', function (err) {
+      t.notOk(err, 'rename /foo /bar')
+
+      fs.readdir('/', function (err, list) {
+        t.notOk(err, 'readdir /foo /bar')
+        t.same(list, ['bar'], '/bar exists')
+        fs.rmdir('/bar', function (err) {
+          t.ok(!err, 'rrmdir /bar shouldn\'t have an error')
+          t.end()
+        })
+      })
+    })
+  })
+})
+
+// test('rename to non empty dir', function (t) {
+//   fs.mkdir('/foo', function () {
+//     fs.mkdir('/bar', function () {
+//       fs.mkdir('/bar/baz', function () {
+//         fs.rename('/foo', '/bar', function (err) {
+//           t.ok(err)
+//           t.same(err.code, 'ENOTEMPTY')
+//
+//           fs.readdir('/', function (err, list) {
+//             t.notOk(err)
+//             t.same(list.sort(), ['bar', 'foo'])
+//             t.end()
+//           })
+//         })
+//       })
+//     })
+//   })
+// })
+
+},{"../../chrome":28,"tape":30}],64:[function(require,module,exports){
+var test = require('tape').test
+var fs = require('../../chrome')
+
 test('rmdir', function (t) {
   fs.rmdir('/', function (err) {
     t.ok(err, 'Delete / should fail')
@@ -8615,7 +8678,7 @@ test('rmdir', function (t) {
   })
 })
 
-},{"../../chrome":28,"tape":30}],64:[function(require,module,exports){
+},{"../../chrome":28,"tape":30}],65:[function(require,module,exports){
 (function (Buffer){
 var fs = require('../../chrome')
 var test = require('tape').test
@@ -8721,7 +8784,7 @@ test('createWriteStream is dir', function (t) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"buffer":3,"tape":30}],65:[function(require,module,exports){
+},{"../../chrome":28,"buffer":3,"tape":30}],66:[function(require,module,exports){
 var fs = require('../../chrome')
 var mkdirp = require('mkdirp')
 var path = '/herp/derp'
@@ -8740,7 +8803,7 @@ mkdirp(path, { 'fs': fs }, function (success) {
   })
 })
 
-},{"../../chrome":28,"assert":2,"mkdirp":29}],66:[function(require,module,exports){
+},{"../../chrome":28,"assert":2,"mkdirp":29}],67:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -8855,7 +8918,7 @@ fs.writeFile(filename3, currentFileData, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],67:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],68:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -8929,7 +8992,7 @@ fs.writeFile(emptyFile, '', function (e) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],68:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],69:[function(require,module,exports){
 var fs = require('../../chrome')
 var assert = require('assert')
 var exists
@@ -8954,7 +9017,7 @@ fs.writeFile(f, 'Some lorum impsum', function () {
   })
 })
 
-},{"../../chrome":28,"assert":2}],69:[function(require,module,exports){
+},{"../../chrome":28,"assert":2}],70:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9012,7 +9075,7 @@ fs.mkdir(pathname2, 511, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2}],70:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2}],71:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9059,7 +9122,7 @@ fs.writeFile(filepath, expected, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],71:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],72:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9116,7 +9179,7 @@ fs.writeFile(file, input, function (e) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],72:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],73:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9331,7 +9394,7 @@ process.on('exit', function () {
 })
  */
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],73:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],74:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9377,7 +9440,7 @@ fs.writeFile(filepath, expected, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],74:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],75:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9448,7 +9511,7 @@ fs.mkdir(readdirDir2, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],75:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],76:[function(require,module,exports){
 (function (global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -9575,7 +9638,7 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
 })
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../chrome":28,"assert":2}],76:[function(require,module,exports){
+},{"../../chrome":28,"assert":2}],77:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9631,7 +9694,7 @@ fs.open(filename, 'w', '0644', function (err, fd) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],77:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],78:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -9768,7 +9831,7 @@ fs.writeFile(filename3, n, { mode: m }, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],78:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],79:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
