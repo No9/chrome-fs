@@ -338,7 +338,7 @@ exports.ftruncate = function (fd, len, callback) {
 }
 
 exports.truncate = function (path, len, callback) {
-  if (util.isNumber(path)) {
+  if (util.isObject(path)) {
     return this.ftruncate(path, len, callback)
   }
   if (util.isFunction(len)) {
@@ -349,9 +349,15 @@ exports.truncate = function (path, len, callback) {
   }
 
   callback = maybeCallback(callback)
-  this.open(path, 'r+', function (er, fd) {
+  this.open(path, 'w', function (er, fd) {
     if (er) return callback(er)
-    fd.onwriteend = callback
+    fd.onwriteend = function (evt) {
+      if (evt.type !== 'writeend') {
+        callback(evt)
+      } else {
+        callback()
+      }
+    }
     fd.truncate(len)
   })
 }
@@ -754,7 +760,7 @@ exports.writeFile = function (path, data, options, cb) {
               fileWriter.onerror = callback
               if (typeof callback === 'function') {
                 fileWriter.onwriteend = function (evt) {
-                  window.setTimeout(callback, 0, null, evt)
+                  window.setTimeout(callback, 0)
                 }
               } else {
                 fileWriter.onwriteend = function () {}
@@ -769,14 +775,22 @@ exports.writeFile = function (path, data, options, cb) {
               fileWriter.write(blob)
             }, function (evt) {
               if (evt.type !== 'writeend') {
-                callback(evt)
+                callback()
+              } else {
+                callback()
               }
             })
           } else {
             callback('incorrect flag')
           }
         }, function () {})
-    }, callback)
+    }, function (evt) {
+          if (evt.type !== 'writeend') {
+            callback(evt)
+          } else {
+            callback()
+          }
+        })
 }
 
 exports.appendFile = function (path, data, options, cb) {
