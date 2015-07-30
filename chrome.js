@@ -699,6 +699,15 @@ exports.unlink = function (fd, callback) {
             {},
             function (fileEntry) {
               fileEntry.remove(callback)
+            }, function (err) {
+              if (err.name === 'TypeMismatchError') {
+                var eisdir = new Error()
+                eisdir.code = 'EISDIR'
+                eisdir.path = path
+                callback(eisdir)
+              } else {
+                callback(err)
+              }
             })
         }, callback)
     } else {
