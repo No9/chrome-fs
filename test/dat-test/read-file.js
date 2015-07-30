@@ -35,7 +35,10 @@ test('readFile + encoding', function (t) {
     fs.readFile('/foo.txt', 'hex', function (err, data) {
       t.notOk(err, 'Error in hex')
       t.same(data, '68656c6c6f', 'hex is equal')
-      t.end()
+      fs.unlink('/foo.txt', function (err) {
+        t.ok(!err, 'unlinked /test.txt')
+        t.end()
+      })
     })
   })
 })

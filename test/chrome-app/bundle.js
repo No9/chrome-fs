@@ -1,6 +1,367 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 
 },{}],2:[function(require,module,exports){
+// http://wiki.commonjs.org/wiki/Unit_Testing/1.0
+//
+// THIS IS NOT TESTED NOR LIKELY TO WORK OUTSIDE V8!
+//
+// Originally from narwhal.js (http://narwhaljs.org)
+// Copyright (c) 2009 Thomas Robinson <280north.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the 'Software'), to
+// deal in the Software without restriction, including without limitation the
+// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+// sell copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+// ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// when used in node, this will actually load the util module we depend on
+// versus loading the builtin util module as happens otherwise
+// this is a bug in node module loading as far as I am concerned
+var util = require('util/');
+
+var pSlice = Array.prototype.slice;
+var hasOwn = Object.prototype.hasOwnProperty;
+
+// 1. The assert module provides functions that throw
+// AssertionError's when particular conditions are not met. The
+// assert module must conform to the following interface.
+
+var assert = module.exports = ok;
+
+// 2. The AssertionError is defined in assert.
+// new assert.AssertionError({ message: message,
+//                             actual: actual,
+//                             expected: expected })
+
+assert.AssertionError = function AssertionError(options) {
+  this.name = 'AssertionError';
+  this.actual = options.actual;
+  this.expected = options.expected;
+  this.operator = options.operator;
+  if (options.message) {
+    this.message = options.message;
+    this.generatedMessage = false;
+  } else {
+    this.message = getMessage(this);
+    this.generatedMessage = true;
+  }
+  var stackStartFunction = options.stackStartFunction || fail;
+
+  if (Error.captureStackTrace) {
+    Error.captureStackTrace(this, stackStartFunction);
+  }
+  else {
+    // non v8 browsers so we can have a stacktrace
+    var err = new Error();
+    if (err.stack) {
+      var out = err.stack;
+
+      // try to strip useless frames
+      var fn_name = stackStartFunction.name;
+      var idx = out.indexOf('\n' + fn_name);
+      if (idx >= 0) {
+        // once we have located the function frame
+        // we need to strip out everything before it (and its line)
+        var next_line = out.indexOf('\n', idx + 1);
+        out = out.substring(next_line + 1);
+      }
+
+      this.stack = out;
+    }
+  }
+};
+
+// assert.AssertionError instanceof Error
+util.inherits(assert.AssertionError, Error);
+
+function replacer(key, value) {
+  if (util.isUndefined(value)) {
+    return '' + value;
+  }
+  if (util.isNumber(value) && !isFinite(value)) {
+    return value.toString();
+  }
+  if (util.isFunction(value) || util.isRegExp(value)) {
+    return value.toString();
+  }
+  return value;
+}
+
+function truncate(s, n) {
+  if (util.isString(s)) {
+    return s.length < n ? s : s.slice(0, n);
+  } else {
+    return s;
+  }
+}
+
+function getMessage(self) {
+  return truncate(JSON.stringify(self.actual, replacer), 128) + ' ' +
+         self.operator + ' ' +
+         truncate(JSON.stringify(self.expected, replacer), 128);
+}
+
+// At present only the three keys mentioned above are used and
+// understood by the spec. Implementations or sub modules can pass
+// other keys to the AssertionError's constructor - they will be
+// ignored.
+
+// 3. All of the following functions must throw an AssertionError
+// when a corresponding condition is not met, with a message that
+// may be undefined if not provided.  All assertion methods provide
+// both the actual and expected values to the assertion error for
+// display purposes.
+
+function fail(actual, expected, message, operator, stackStartFunction) {
+  throw new assert.AssertionError({
+    message: message,
+    actual: actual,
+    expected: expected,
+    operator: operator,
+    stackStartFunction: stackStartFunction
+  });
+}
+
+// EXTENSION! allows for well behaved errors defined elsewhere.
+assert.fail = fail;
+
+// 4. Pure assertion tests whether a value is truthy, as determined
+// by !!guard.
+// assert.ok(guard, message_opt);
+// This statement is equivalent to assert.equal(true, !!guard,
+// message_opt);. To test strictly for the value true, use
+// assert.strictEqual(true, guard, message_opt);.
+
+function ok(value, message) {
+  if (!value) fail(value, true, message, '==', assert.ok);
+}
+assert.ok = ok;
+
+// 5. The equality assertion tests shallow, coercive equality with
+// ==.
+// assert.equal(actual, expected, message_opt);
+
+assert.equal = function equal(actual, expected, message) {
+  if (actual != expected) fail(actual, expected, message, '==', assert.equal);
+};
+
+// 6. The non-equality assertion tests for whether two objects are not equal
+// with != assert.notEqual(actual, expected, message_opt);
+
+assert.notEqual = function notEqual(actual, expected, message) {
+  if (actual == expected) {
+    fail(actual, expected, message, '!=', assert.notEqual);
+  }
+};
+
+// 7. The equivalence assertion tests a deep equality relation.
+// assert.deepEqual(actual, expected, message_opt);
+
+assert.deepEqual = function deepEqual(actual, expected, message) {
+  if (!_deepEqual(actual, expected)) {
+    fail(actual, expected, message, 'deepEqual', assert.deepEqual);
+  }
+};
+
+function _deepEqual(actual, expected) {
+  // 7.1. All identical values are equivalent, as determined by ===.
+  if (actual === expected) {
+    return true;
+
+  } else if (util.isBuffer(actual) && util.isBuffer(expected)) {
+    if (actual.length != expected.length) return false;
+
+    for (var i = 0; i < actual.length; i++) {
+      if (actual[i] !== expected[i]) return false;
+    }
+
+    return true;
+
+  // 7.2. If the expected value is a Date object, the actual value is
+  // equivalent if it is also a Date object that refers to the same time.
+  } else if (util.isDate(actual) && util.isDate(expected)) {
+    return actual.getTime() === expected.getTime();
+
+  // 7.3 If the expected value is a RegExp object, the actual value is
+  // equivalent if it is also a RegExp object with the same source and
+  // properties (`global`, `multiline`, `lastIndex`, `ignoreCase`).
+  } else if (util.isRegExp(actual) && util.isRegExp(expected)) {
+    return actual.source === expected.source &&
+           actual.global === expected.global &&
+           actual.multiline === expected.multiline &&
+           actual.lastIndex === expected.lastIndex &&
+           actual.ignoreCase === expected.ignoreCase;
+
+  // 7.4. Other pairs that do not both pass typeof value == 'object',
+  // equivalence is determined by ==.
+  } else if (!util.isObject(actual) && !util.isObject(expected)) {
+    return actual == expected;
+
+  // 7.5 For all other Object pairs, including Array objects, equivalence is
+  // determined by having the same number of owned properties (as verified
+  // with Object.prototype.hasOwnProperty.call), the same set of keys
+  // (although not necessarily the same order), equivalent values for every
+  // corresponding key, and an identical 'prototype' property. Note: this
+  // accounts for both named and indexed properties on Arrays.
+  } else {
+    return objEquiv(actual, expected);
+  }
+}
+
+function isArguments(object) {
+  return Object.prototype.toString.call(object) == '[object Arguments]';
+}
+
+function objEquiv(a, b) {
+  if (util.isNullOrUndefined(a) || util.isNullOrUndefined(b))
+    return false;
+  // an identical 'prototype' property.
+  if (a.prototype !== b.prototype) return false;
+  // if one is a primitive, the other must be same
+  if (util.isPrimitive(a) || util.isPrimitive(b)) {
+    return a === b;
+  }
+  var aIsArgs = isArguments(a),
+      bIsArgs = isArguments(b);
+  if ((aIsArgs && !bIsArgs) || (!aIsArgs && bIsArgs))
+    return false;
+  if (aIsArgs) {
+    a = pSlice.call(a);
+    b = pSlice.call(b);
+    return _deepEqual(a, b);
+  }
+  var ka = objectKeys(a),
+      kb = objectKeys(b),
+      key, i;
+  // having the same number of owned properties (keys incorporates
+  // hasOwnProperty)
+  if (ka.length != kb.length)
+    return false;
+  //the same set of keys (although not necessarily the same order),
+  ka.sort();
+  kb.sort();
+  //~~~cheap key test
+  for (i = ka.length - 1; i >= 0; i--) {
+    if (ka[i] != kb[i])
+      return false;
+  }
+  //equivalent values for every corresponding key, and
+  //~~~possibly expensive deep test
+  for (i = ka.length - 1; i >= 0; i--) {
+    key = ka[i];
+    if (!_deepEqual(a[key], b[key])) return false;
+  }
+  return true;
+}
+
+// 8. The non-equivalence assertion tests for any deep inequality.
+// assert.notDeepEqual(actual, expected, message_opt);
+
+assert.notDeepEqual = function notDeepEqual(actual, expected, message) {
+  if (_deepEqual(actual, expected)) {
+    fail(actual, expected, message, 'notDeepEqual', assert.notDeepEqual);
+  }
+};
+
+// 9. The strict equality assertion tests strict equality, as determined by ===.
+// assert.strictEqual(actual, expected, message_opt);
+
+assert.strictEqual = function strictEqual(actual, expected, message) {
+  if (actual !== expected) {
+    fail(actual, expected, message, '===', assert.strictEqual);
+  }
+};
+
+// 10. The strict non-equality assertion tests for strict inequality, as
+// determined by !==.  assert.notStrictEqual(actual, expected, message_opt);
+
+assert.notStrictEqual = function notStrictEqual(actual, expected, message) {
+  if (actual === expected) {
+    fail(actual, expected, message, '!==', assert.notStrictEqual);
+  }
+};
+
+function expectedException(actual, expected) {
+  if (!actual || !expected) {
+    return false;
+  }
+
+  if (Object.prototype.toString.call(expected) == '[object RegExp]') {
+    return expected.test(actual);
+  } else if (actual instanceof expected) {
+    return true;
+  } else if (expected.call({}, actual) === true) {
+    return true;
+  }
+
+  return false;
+}
+
+function _throws(shouldThrow, block, expected, message) {
+  var actual;
+
+  if (util.isString(expected)) {
+    message = expected;
+    expected = null;
+  }
+
+  try {
+    block();
+  } catch (e) {
+    actual = e;
+  }
+
+  message = (expected && expected.name ? ' (' + expected.name + ').' : '.') +
+            (message ? ' ' + message : '.');
+
+  if (shouldThrow && !actual) {
+    fail(actual, expected, 'Missing expected exception' + message);
+  }
+
+  if (!shouldThrow && expectedException(actual, expected)) {
+    fail(actual, expected, 'Got unwanted exception' + message);
+  }
+
+  if ((shouldThrow && actual && expected &&
+      !expectedException(actual, expected)) || (!shouldThrow && actual)) {
+    throw actual;
+  }
+}
+
+// 11. Expected to throw an error:
+// assert.throws(block, Error_opt, message_opt);
+
+assert.throws = function(block, /*optional*/error, /*optional*/message) {
+  _throws.apply(this, [true].concat(pSlice.call(arguments)));
+};
+
+// EXTENSION! This is annoying to write outside this module.
+assert.doesNotThrow = function(block, /*optional*/message) {
+  _throws.apply(this, [false].concat(pSlice.call(arguments)));
+};
+
+assert.ifError = function(err) { if (err) {throw err;}};
+
+var objectKeys = Object.keys || function (obj) {
+  var keys = [];
+  for (var key in obj) {
+    if (hasOwn.call(obj, key)) keys.push(key);
+  }
+  return keys;
+};
+
+},{"util/":27}],3:[function(require,module,exports){
 /*!
  * The buffer module from node.js, for the browser.
  *
@@ -1318,7 +1679,7 @@ function decodeUtf8Char (str) {
   }
 }
 
-},{"base64-js":3,"ieee754":4,"is-array":5}],3:[function(require,module,exports){
+},{"base64-js":4,"ieee754":5,"is-array":6}],4:[function(require,module,exports){
 var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 ;(function (exports) {
@@ -1444,7 +1805,7 @@ var lookup = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 	exports.fromByteArray = uint8ToBase64
 }(typeof exports === 'undefined' ? (this.base64js = {}) : exports))
 
-},{}],4:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 exports.read = function(buffer, offset, isLE, mLen, nBytes) {
   var e, m,
       eLen = nBytes * 8 - mLen - 1,
@@ -1530,7 +1891,7 @@ exports.write = function(buffer, value, offset, isLE, mLen, nBytes) {
   buffer[offset + i - d] |= s * 128;
 };
 
-},{}],5:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 
 /**
  * isArray
@@ -1565,7 +1926,7 @@ module.exports = isArray || function (val) {
   return !! val && '[object Array]' == str.call(val);
 };
 
-},{}],6:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 module.exports={
   "O_RDONLY": 0,
   "O_WRONLY": 1,
@@ -1745,7 +2106,7 @@ module.exports={
   "NPN_ENABLED": 1
 }
 
-},{}],7:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -2048,7 +2409,7 @@ function isUndefined(arg) {
   return arg === void 0;
 }
 
-},{}],8:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 if (typeof Object.create === 'function') {
   // implementation from standard node.js 'util' module
   module.exports = function inherits(ctor, superCtor) {
@@ -2073,12 +2434,12 @@ if (typeof Object.create === 'function') {
   }
 }
 
-},{}],9:[function(require,module,exports){
+},{}],10:[function(require,module,exports){
 module.exports = Array.isArray || function (arr) {
   return Object.prototype.toString.call(arr) == '[object Array]';
 };
 
-},{}],10:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -2306,7 +2667,7 @@ var substr = 'ab'.substr(-1) === 'b'
 ;
 
 }).call(this,require('_process'))
-},{"_process":11}],11:[function(require,module,exports){
+},{"_process":12}],12:[function(require,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -2365,10 +2726,10 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],12:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 module.exports = require("./lib/_stream_duplex.js")
 
-},{"./lib/_stream_duplex.js":13}],13:[function(require,module,exports){
+},{"./lib/_stream_duplex.js":14}],14:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -2461,7 +2822,7 @@ function forEach (xs, f) {
 }
 
 }).call(this,require('_process'))
-},{"./_stream_readable":15,"./_stream_writable":17,"_process":11,"core-util-is":18,"inherits":8}],14:[function(require,module,exports){
+},{"./_stream_readable":16,"./_stream_writable":18,"_process":12,"core-util-is":19,"inherits":9}],15:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -2509,7 +2870,7 @@ PassThrough.prototype._transform = function(chunk, encoding, cb) {
   cb(null, chunk);
 };
 
-},{"./_stream_transform":16,"core-util-is":18,"inherits":8}],15:[function(require,module,exports){
+},{"./_stream_transform":17,"core-util-is":19,"inherits":9}],16:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -3495,7 +3856,7 @@ function indexOf (xs, x) {
 }
 
 }).call(this,require('_process'))
-},{"_process":11,"buffer":2,"core-util-is":18,"events":7,"inherits":8,"isarray":9,"stream":23,"string_decoder/":24}],16:[function(require,module,exports){
+},{"_process":12,"buffer":3,"core-util-is":19,"events":8,"inherits":9,"isarray":10,"stream":24,"string_decoder/":25}],17:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -3707,7 +4068,7 @@ function done(stream, er) {
   return stream.push(null);
 }
 
-},{"./_stream_duplex":13,"core-util-is":18,"inherits":8}],17:[function(require,module,exports){
+},{"./_stream_duplex":14,"core-util-is":19,"inherits":9}],18:[function(require,module,exports){
 (function (process){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -4097,7 +4458,7 @@ function endWritable(stream, state, cb) {
 }
 
 }).call(this,require('_process'))
-},{"./_stream_duplex":13,"_process":11,"buffer":2,"core-util-is":18,"inherits":8,"stream":23}],18:[function(require,module,exports){
+},{"./_stream_duplex":14,"_process":12,"buffer":3,"core-util-is":19,"inherits":9,"stream":24}],19:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -4207,10 +4568,10 @@ function objectToString(o) {
   return Object.prototype.toString.call(o);
 }
 }).call(this,require("buffer").Buffer)
-},{"buffer":2}],19:[function(require,module,exports){
+},{"buffer":3}],20:[function(require,module,exports){
 module.exports = require("./lib/_stream_passthrough.js")
 
-},{"./lib/_stream_passthrough.js":14}],20:[function(require,module,exports){
+},{"./lib/_stream_passthrough.js":15}],21:[function(require,module,exports){
 var Stream = require('stream'); // hack to fix a circular dependency issue when used with browserify
 exports = module.exports = require('./lib/_stream_readable.js');
 exports.Stream = Stream;
@@ -4220,13 +4581,13 @@ exports.Duplex = require('./lib/_stream_duplex.js');
 exports.Transform = require('./lib/_stream_transform.js');
 exports.PassThrough = require('./lib/_stream_passthrough.js');
 
-},{"./lib/_stream_duplex.js":13,"./lib/_stream_passthrough.js":14,"./lib/_stream_readable.js":15,"./lib/_stream_transform.js":16,"./lib/_stream_writable.js":17,"stream":23}],21:[function(require,module,exports){
+},{"./lib/_stream_duplex.js":14,"./lib/_stream_passthrough.js":15,"./lib/_stream_readable.js":16,"./lib/_stream_transform.js":17,"./lib/_stream_writable.js":18,"stream":24}],22:[function(require,module,exports){
 module.exports = require("./lib/_stream_transform.js")
 
-},{"./lib/_stream_transform.js":16}],22:[function(require,module,exports){
+},{"./lib/_stream_transform.js":17}],23:[function(require,module,exports){
 module.exports = require("./lib/_stream_writable.js")
 
-},{"./lib/_stream_writable.js":17}],23:[function(require,module,exports){
+},{"./lib/_stream_writable.js":18}],24:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -4355,7 +4716,7 @@ Stream.prototype.pipe = function(dest, options) {
   return dest;
 };
 
-},{"events":7,"inherits":8,"readable-stream/duplex.js":12,"readable-stream/passthrough.js":19,"readable-stream/readable.js":20,"readable-stream/transform.js":21,"readable-stream/writable.js":22}],24:[function(require,module,exports){
+},{"events":8,"inherits":9,"readable-stream/duplex.js":13,"readable-stream/passthrough.js":20,"readable-stream/readable.js":21,"readable-stream/transform.js":22,"readable-stream/writable.js":23}],25:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -4578,14 +4939,14 @@ function base64DetectIncompleteChar(buffer) {
   this.charLength = this.charReceived ? 3 : 0;
 }
 
-},{"buffer":2}],25:[function(require,module,exports){
+},{"buffer":3}],26:[function(require,module,exports){
 module.exports = function isBuffer(arg) {
   return arg && typeof arg === 'object'
     && typeof arg.copy === 'function'
     && typeof arg.fill === 'function'
     && typeof arg.readUInt8 === 'function';
 }
-},{}],26:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 (function (process,global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -5175,7 +5536,7 @@ function hasOwnProperty(obj, prop) {
 }
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"./support/isBuffer":25,"_process":11,"inherits":8}],27:[function(require,module,exports){
+},{"./support/isBuffer":26,"_process":12,"inherits":9}],28:[function(require,module,exports){
 (function (process){
 var util = require('util')
 var Buffer = require('buffer').Buffer
@@ -5756,7 +6117,6 @@ exports.readFile = function (path, options, cb) {
   } else if (!util.isObject(options)) {
     throw new TypeError('Bad arguments')
   }
-  console.log('Options ' + JSON.stringify(options))
   var encoding = options.encoding
   assertEncoding(encoding)
   window.requestFileSystem(
@@ -5767,21 +6127,15 @@ exports.readFile = function (path, options, cb) {
         path,
         opts,
         function (fileEntry) {
-          console.log('Getting ' + encoding)
           fileEntry.file(function (file) {
-            console.log(file)
             fileEntry.onerror = callback
             var fileReader = new FileReader() // eslint-disable-line
             fileReader.onload = function (evt) {
-              console.log('Called on file load')
-              console.log('Options ' + JSON.stringify(options))
               if (options.encoding === null) {
-                console.log('encoding is null')
                 window.setTimeout(callback, 0, null, new Buffer(this.result, 'binary'))
               } else if (options.encoding === 'hex') {
                 window.setTimeout(callback, 0, null, new Buffer(this.result).toString('hex'))
               } else {
-                console.log('encoding is default')
                 window.setTimeout(callback, 0, null, this.result)
               }
             }
@@ -5792,7 +6146,6 @@ exports.readFile = function (path, options, cb) {
             if (file.type === 'text/plain') {
               fileReader.readAsText(file)
             } else {
-              console.log('Called on octet load')
               fileReader.readAsArrayBuffer(file)
             }
           })
@@ -6356,7 +6709,109 @@ function flagToString (flag) {
 }
 
 }).call(this,require('_process'))
-},{"_process":11,"buffer":2,"constants":6,"path":10,"stream":23,"util":26}],28:[function(require,module,exports){
+},{"_process":12,"buffer":3,"constants":7,"path":11,"stream":24,"util":27}],29:[function(require,module,exports){
+(function (process){
+var path = require('path');
+var fs = require('fs');
+var _0777 = parseInt('0777', 8);
+
+module.exports = mkdirP.mkdirp = mkdirP.mkdirP = mkdirP;
+
+function mkdirP (p, opts, f, made) {
+    if (typeof opts === 'function') {
+        f = opts;
+        opts = {};
+    }
+    else if (!opts || typeof opts !== 'object') {
+        opts = { mode: opts };
+    }
+    
+    var mode = opts.mode;
+    var xfs = opts.fs || fs;
+    
+    if (mode === undefined) {
+        mode = _0777 & (~process.umask());
+    }
+    if (!made) made = null;
+    
+    var cb = f || function () {};
+    p = path.resolve(p);
+    
+    xfs.mkdir(p, mode, function (er) {
+        if (!er) {
+            made = made || p;
+            return cb(null, made);
+        }
+        switch (er.code) {
+            case 'ENOENT':
+                mkdirP(path.dirname(p), opts, function (er, made) {
+                    if (er) cb(er, made);
+                    else mkdirP(p, opts, cb, made);
+                });
+                break;
+
+            // In the case of any other error, just see if there's a dir
+            // there already.  If so, then hooray!  If not, then something
+            // is borked.
+            default:
+                xfs.stat(p, function (er2, stat) {
+                    // if the stat fails, then that's super weird.
+                    // let the original error be the failure reason.
+                    if (er2 || !stat.isDirectory()) cb(er, made)
+                    else cb(null, made);
+                });
+                break;
+        }
+    });
+}
+
+mkdirP.sync = function sync (p, opts, made) {
+    if (!opts || typeof opts !== 'object') {
+        opts = { mode: opts };
+    }
+    
+    var mode = opts.mode;
+    var xfs = opts.fs || fs;
+    
+    if (mode === undefined) {
+        mode = _0777 & (~process.umask());
+    }
+    if (!made) made = null;
+
+    p = path.resolve(p);
+
+    try {
+        xfs.mkdirSync(p, mode);
+        made = made || p;
+    }
+    catch (err0) {
+        switch (err0.code) {
+            case 'ENOENT' :
+                made = sync(path.dirname(p), opts, made);
+                sync(p, opts, made);
+                break;
+
+            // In the case of any other error, just see if there's a dir
+            // there already.  If so, then hooray!  If not, then something
+            // is borked.
+            default:
+                var stat;
+                try {
+                    stat = xfs.statSync(p);
+                }
+                catch (err1) {
+                    throw err0;
+                }
+                if (!stat.isDirectory()) throw err0;
+                break;
+        }
+    }
+
+    return made;
+};
+
+}).call(this,require('_process'))
+},{"_process":12,"fs":1,"path":11}],30:[function(require,module,exports){
 (function (process){
 var defined = require('defined');
 var createDefaultStream = require('./lib/default_stream');
@@ -6500,7 +6955,7 @@ function createHarness (conf_) {
 }
 
 }).call(this,require('_process'))
-},{"./lib/default_stream":29,"./lib/results":30,"./lib/test":31,"_process":11,"defined":35,"through":39}],29:[function(require,module,exports){
+},{"./lib/default_stream":31,"./lib/results":32,"./lib/test":33,"_process":12,"defined":37,"through":41}],31:[function(require,module,exports){
 (function (process){
 var through = require('through');
 var fs = require('fs');
@@ -6535,7 +6990,7 @@ module.exports = function () {
 };
 
 }).call(this,require('_process'))
-},{"_process":11,"fs":1,"through":39}],30:[function(require,module,exports){
+},{"_process":12,"fs":1,"through":41}],32:[function(require,module,exports){
 (function (process){
 var EventEmitter = require('events').EventEmitter;
 var inherits = require('inherits');
@@ -6729,7 +7184,7 @@ function has (obj, prop) {
 }
 
 }).call(this,require('_process'))
-},{"_process":11,"events":7,"inherits":36,"object-inspect":37,"resumer":38,"through":39}],31:[function(require,module,exports){
+},{"_process":12,"events":8,"inherits":38,"object-inspect":39,"resumer":40,"through":41}],33:[function(require,module,exports){
 (function (process,__dirname){
 var deepEqual = require('deep-equal');
 var defined = require('defined');
@@ -7229,7 +7684,7 @@ Test.skip = function (name_, _opts, _cb) {
 
 
 }).call(this,require('_process'),"/node_modules\\tape\\lib")
-},{"_process":11,"deep-equal":32,"defined":35,"events":7,"inherits":36,"path":10}],32:[function(require,module,exports){
+},{"_process":12,"deep-equal":34,"defined":37,"events":8,"inherits":38,"path":11}],34:[function(require,module,exports){
 var pSlice = Array.prototype.slice;
 var objectKeys = require('./lib/keys.js');
 var isArguments = require('./lib/is_arguments.js');
@@ -7325,7 +7780,7 @@ function objEquiv(a, b, opts) {
   return typeof a === typeof b;
 }
 
-},{"./lib/is_arguments.js":33,"./lib/keys.js":34}],33:[function(require,module,exports){
+},{"./lib/is_arguments.js":35,"./lib/keys.js":36}],35:[function(require,module,exports){
 var supportsArgumentsClass = (function(){
   return Object.prototype.toString.call(arguments)
 })() == '[object Arguments]';
@@ -7347,7 +7802,7 @@ function unsupported(object){
     false;
 };
 
-},{}],34:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
 exports = module.exports = typeof Object.keys === 'function'
   ? Object.keys : shim;
 
@@ -7358,16 +7813,16 @@ function shim (obj) {
   return keys;
 }
 
-},{}],35:[function(require,module,exports){
+},{}],37:[function(require,module,exports){
 module.exports = function () {
     for (var i = 0; i < arguments.length; i++) {
         if (arguments[i] !== undefined) return arguments[i];
     }
 };
 
-},{}],36:[function(require,module,exports){
-arguments[4][8][0].apply(exports,arguments)
-},{"dup":8}],37:[function(require,module,exports){
+},{}],38:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"dup":9}],39:[function(require,module,exports){
 module.exports = function inspect_ (obj, opts, depth, seen) {
     if (!opts) opts = {};
     
@@ -7516,7 +7971,7 @@ function inspectString (str) {
     }
 }
 
-},{}],38:[function(require,module,exports){
+},{}],40:[function(require,module,exports){
 (function (process){
 var through = require('through');
 var nextTick = typeof setImmediate !== 'undefined'
@@ -7549,7 +8004,7 @@ module.exports = function (write, end) {
 };
 
 }).call(this,require('_process'))
-},{"_process":11,"through":39}],39:[function(require,module,exports){
+},{"_process":12,"through":41}],41:[function(require,module,exports){
 (function (process){
 var Stream = require('stream')
 
@@ -7661,35 +8116,341 @@ function through (write, end, opts) {
 
 
 }).call(this,require('_process'))
-},{"_process":11,"stream":23}],40:[function(require,module,exports){
-// require('../simple/test-fs-stat')
-// require('../simple/test-fs-exists')
-// require('../simple/test-fs-write-file')
-// require('../simple/test-fs-append-file')
-// require('../simple/test-fs-mkdir')
-// require('../simple/test-fs-readdir')
-// require('../simple/test-fs-write')
-// require('../simple/test-fs-write-buffer')
-// require('../simple/test-fs-read')
-// require('../simple/test-fs-read-buffer')
-// require('../simple/test-fs-read-stream-fd')
-// require('../simple/test-fs-read-stream')
-// require('../simple/test-fs-empty-read-stream')
-// require('../dat-test/mkdir')
-// require('../dat-test/rmdir')
-// require('../dat-test/write-stream')
-// require('../dat-test/read-stream')
-// require('../dat-test/append-file')
-// require('../dat-test/close')
-// require('../dat-test/exists')
-// require('../dat-test/open')
-// require('../dat-test/read')
-// require('../dat-test/readdir')
-// require('../dat-test/rename')
-require('../dat-test/read-file')
-// require('../libs/mkdirp-test')
+},{"_process":12,"stream":24}],42:[function(require,module,exports){
+arguments[4][14][0].apply(exports,arguments)
+},{"./_stream_readable":43,"./_stream_writable":45,"_process":12,"core-util-is":46,"dup":14,"inherits":47}],43:[function(require,module,exports){
+arguments[4][16][0].apply(exports,arguments)
+},{"_process":12,"buffer":3,"core-util-is":46,"dup":16,"events":8,"inherits":47,"isarray":48,"stream":24,"string_decoder/":49}],44:[function(require,module,exports){
+arguments[4][17][0].apply(exports,arguments)
+},{"./_stream_duplex":42,"core-util-is":46,"dup":17,"inherits":47}],45:[function(require,module,exports){
+arguments[4][18][0].apply(exports,arguments)
+},{"./_stream_duplex":42,"_process":12,"buffer":3,"core-util-is":46,"dup":18,"inherits":47,"stream":24}],46:[function(require,module,exports){
+arguments[4][19][0].apply(exports,arguments)
+},{"buffer":3,"dup":19}],47:[function(require,module,exports){
+arguments[4][9][0].apply(exports,arguments)
+},{"dup":9}],48:[function(require,module,exports){
+arguments[4][10][0].apply(exports,arguments)
+},{"dup":10}],49:[function(require,module,exports){
+arguments[4][25][0].apply(exports,arguments)
+},{"buffer":3,"dup":25}],50:[function(require,module,exports){
+arguments[4][22][0].apply(exports,arguments)
+},{"./lib/_stream_transform.js":44,"dup":22}],51:[function(require,module,exports){
+module.exports = extend
 
-},{"../dat-test/read-file":41}],41:[function(require,module,exports){
+function extend() {
+    var target = {}
+
+    for (var i = 0; i < arguments.length; i++) {
+        var source = arguments[i]
+
+        for (var key in source) {
+            if (source.hasOwnProperty(key)) {
+                target[key] = source[key]
+            }
+        }
+    }
+
+    return target
+}
+
+},{}],52:[function(require,module,exports){
+(function (process){
+var Transform = require('readable-stream/transform')
+  , inherits  = require('util').inherits
+  , xtend     = require('xtend')
+
+function DestroyableTransform(opts) {
+  Transform.call(this, opts)
+  this._destroyed = false
+}
+
+inherits(DestroyableTransform, Transform)
+
+DestroyableTransform.prototype.destroy = function(err) {
+  if (this._destroyed) return
+  this._destroyed = true
+  
+  var self = this
+  process.nextTick(function() {
+    if (err)
+      self.emit('error', err)
+    self.emit('close')
+  })
+}
+
+// a noop _transform function
+function noop (chunk, enc, callback) {
+  callback(null, chunk)
+}
+
+
+// create a new export function, used by both the main export and
+// the .ctor export, contains common logic for dealing with arguments
+function through2 (construct) {
+  return function (options, transform, flush) {
+    if (typeof options == 'function') {
+      flush     = transform
+      transform = options
+      options   = {}
+    }
+
+    if (typeof transform != 'function')
+      transform = noop
+
+    if (typeof flush != 'function')
+      flush = null
+
+    return construct(options, transform, flush)
+  }
+}
+
+
+// main export, just make me a transform stream!
+module.exports = through2(function (options, transform, flush) {
+  var t2 = new DestroyableTransform(options)
+
+  t2._transform = transform
+
+  if (flush)
+    t2._flush = flush
+
+  return t2
+})
+
+
+// make me a reusable prototype that I can `new`, or implicitly `new`
+// with a constructor call
+module.exports.ctor = through2(function (options, transform, flush) {
+  function Through2 (override) {
+    if (!(this instanceof Through2))
+      return new Through2(override)
+
+    this.options = xtend(options, override)
+
+    DestroyableTransform.call(this, this.options)
+  }
+
+  inherits(Through2, DestroyableTransform)
+
+  Through2.prototype._transform = transform
+
+  if (flush)
+    Through2.prototype._flush = flush
+
+  return Through2
+})
+
+
+module.exports.obj = through2(function (options, transform, flush) {
+  var t2 = new DestroyableTransform(xtend({ objectMode: true, highWaterMark: 16 }, options))
+
+  t2._transform = transform
+
+  if (flush)
+    t2._flush = flush
+
+  return t2
+})
+
+}).call(this,require('_process'))
+},{"_process":12,"readable-stream/transform":50,"util":27,"xtend":51}],53:[function(require,module,exports){
+require('../simple/test-fs-stat')
+require('../simple/test-fs-exists')
+require('../simple/test-fs-write-file')
+require('../simple/test-fs-append-file')
+require('../simple/test-fs-mkdir')
+require('../simple/test-fs-readdir')
+require('../simple/test-fs-write')
+require('../simple/test-fs-write-buffer')
+require('../simple/test-fs-read')
+require('../simple/test-fs-read-buffer')
+require('../simple/test-fs-read-stream-fd')
+require('../simple/test-fs-read-stream')
+require('../simple/test-fs-empty-read-stream')
+require('../dat-test/mkdir')
+require('../dat-test/rmdir')
+require('../dat-test/write-stream')
+require('../dat-test/read-stream')
+require('../dat-test/append-file')
+require('../dat-test/close')
+require('../dat-test/exists')
+require('../dat-test/open')
+require('../dat-test/read')
+require('../dat-test/readdir')
+require('../dat-test/rename')
+require('../dat-test/read-file')
+require('../libs/mkdirp-test')
+
+},{"../dat-test/append-file":55,"../dat-test/close":56,"../dat-test/exists":57,"../dat-test/mkdir":58,"../dat-test/open":59,"../dat-test/read":62,"../dat-test/read-file":60,"../dat-test/read-stream":61,"../dat-test/readdir":63,"../dat-test/rename":64,"../dat-test/rmdir":65,"../dat-test/write-stream":66,"../libs/mkdirp-test":67,"../simple/test-fs-append-file":68,"../simple/test-fs-empty-read-stream":69,"../simple/test-fs-exists":70,"../simple/test-fs-mkdir":71,"../simple/test-fs-read":75,"../simple/test-fs-read-buffer":72,"../simple/test-fs-read-stream":74,"../simple/test-fs-read-stream-fd":73,"../simple/test-fs-readdir":76,"../simple/test-fs-stat":77,"../simple/test-fs-write":80,"../simple/test-fs-write-buffer":78,"../simple/test-fs-write-file":79}],54:[function(require,module,exports){
+exports.tmpDir = '/'
+exports.error = function (msg) {
+  console.log(msg)
+}
+exports.fixturesDir = '/'
+
+},{}],55:[function(require,module,exports){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('appendFile', function (t) {
+  fs.writeFile('/test.txt', 'hello', function (err) {
+    t.notOk(err)
+    fs.appendFile('/test.txt', ' world', function (err) {
+      t.notOk(err)
+      fs.readFile('/test.txt', function (err, data) {
+        t.notOk(err)
+        t.same(data.toString(), 'hello world')
+        fs.unlink('/test.txt', function (err) {
+          t.ok(!err, 'unlinked /test.txt')
+          t.end()
+        })
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"tape":30}],56:[function(require,module,exports){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('close', function (t) {
+  fs.open('/testclose', 'w', function (err, fd) {
+    t.ok(!err)
+    fs.close(fd, function (err) {
+      t.ok(!err)
+      fs.fsync(fd, function (err) {
+        t.ok(err)
+        t.same(err.code, 'EBADF')
+        fs.unlink('/testclose', function (err) {
+          t.ok(!err)
+          t.end()
+        })
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"tape":30}],57:[function(require,module,exports){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('exists', function (t) {
+  fs.exists('/', function (exists) {
+    t.ok(exists, '/ exists')
+    fs.exists('/foox', function (exists) {
+      t.notOk(exists, '/foox does not exist')
+      fs.mkdir('/foox', function () {
+        fs.exists('/foox', function (exists) {
+          t.ok(exists, '/foox exists second')
+          fs.rmdir('/foox', function (err) {
+            t.ok(!err, 'rmdir /foox')
+            t.end()
+          })
+        })
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"tape":30}],58:[function(require,module,exports){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('mkdir', function (t) {
+  fs.mkdir('/foo/bar', function (err) {
+    t.ok(err, '/foo/bar is an error')
+    t.same(err.code, 'ENOENT', '/foo/bar should be no entry')
+
+    fs.mkdir('/foo', function (err) {
+      t.notOk(err, '/foo should create')
+
+      fs.mkdir('/foo', function (err) {
+        t.ok(err, 'Trying second /foo')
+        t.same(err.code, 'EEXIST', 'second foo exists')
+
+        fs.mkdir('/foo/bar', function (err) {
+          t.notOk(err)
+          t.end()
+        })
+      })
+    })
+  })
+})
+
+test('mkdir + stat', function (t) {
+  fs.mkdir('/foo', function () {
+    fs.stat('/foo', function (err, stat) {
+      t.notOk(err)
+      t.same(stat.mode, '0777') // eslint-disable-line
+      t.ok(stat.isDirectory())
+      t.end()
+    })
+  })
+})
+ // Mode will always default to '0777' on chrome OS
+test('mkdir with modes', function (t) {
+  fs.mkdir('/foo', '0766', function () { // eslint-disable-line
+    fs.stat('/foo', function (err, stat) {
+      t.notOk(err)
+      t.same(stat.mode, '0777') // eslint-disable-line
+      t.ok(stat.isDirectory())
+      fs.rmdir('/foo/bar', function (err) {
+        console.log('Clean /foo/bar mkdir', 'Error', err)
+        fs.rmdir('/foo', function (err) {
+          console.log('Clean mkdir', 'Error', err)
+        })
+      })
+      t.end()
+    })
+  })
+})
+
+},{"../../chrome":28,"tape":30}],59:[function(require,module,exports){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('openfs', function (t) {
+  fs.open('/testo1.txt', 'w', function (err, fd) {
+    t.ok(!err)
+    t.same(typeof fd, 'object')
+    fs.unlink('/testo1.txt', function (err) {
+      t.ok(!err)
+      t.end()
+    })
+  })
+})
+
+test('open not exist', function (t) {
+  fs.open('/test2', 'r', function (err, fd) {
+    t.ok(err)
+    t.same(err.code, 'ENOENT')
+    fs.open('/test2', 'w', function (err, fd) {
+      t.ok(!err)
+      t.same(typeof fd, 'object')
+      fs.unlink('/test2', function (err) {
+        t.ok(!err)
+        t.end()
+      })
+    })
+  })
+})
+
+test('open w+', function (t) {
+  fs.open('/test3', 'w+', function (err, fd) {
+    t.ok(!err)
+    t.same(typeof fd, 'object')
+
+    fs.stat('/test3', function (err, stat) {
+      t.ok(!err)
+      fs.unlink('/test3', function (err) {
+        t.ok(!err)
+        t.end()
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"tape":30}],60:[function(require,module,exports){
 (function (Buffer){
 var test = require('tape').test
 var fs = require('../../chrome')
@@ -7728,10 +8489,1491 @@ test('readFile + encoding', function (t) {
     fs.readFile('/foo.txt', 'hex', function (err, data) {
       t.notOk(err, 'Error in hex')
       t.same(data, '68656c6c6f', 'hex is equal')
-      t.end()
+      fs.unlink('/foo.txt', function (err) {
+        t.ok(!err, 'unlinked /test.txt')
+        t.end()
+      })
     })
   })
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":27,"buffer":2,"tape":28}]},{},[40]);
+},{"../../chrome":28,"buffer":3,"tape":30}],61:[function(require,module,exports){
+(function (Buffer){
+var test = require('tape').test
+var fs = require('../../chrome')
+var through = require('through2')
+
+test('createReadStream', function (t) {
+  fs.writeFile('/test1.txt', 'hello', function (err) {
+    t.ok(!err, 'Write file error')
+    var rs = fs.createReadStream('/test1.txt')
+    rs.pipe(through(function (chunk, enc, callback) {
+      t.same(chunk, new Buffer('hello'), '/test1.txt contians hello')
+      fs.unlink('/test1.txt', function (err) {
+        t.ok(!err, 'unlinked /test1.txt')
+        t.end()
+        callback()
+      })
+    }))
+  })
+})
+
+test('createReadStream big file', function (t) {
+  var big = new Buffer(100 * 1024)
+
+  fs.writeFile('/test2.txt', big, function (err) {
+    t.ok(!err)
+    var rs = fs.createReadStream('/test2.txt')
+    // We can use through because the file API doesn't stream
+    // so all the data is in through chunck
+    // This will break when seeking is implemented
+    rs.pipe(through(function (chunk, enc, callback) {
+      t.same(chunk, big)
+      fs.unlink('/test2.txt', function (err) {
+        t.ok(!err, 'unlinked /test2.txt')
+        t.end()
+        callback()
+      })
+    }))
+  })
+})
+
+test('createReadStream random access', function (t) {
+  fs.writeFile('/testra.txt', 'hello world', function (err) {
+    t.ok(!err)
+    var rs = fs.createReadStream('/testra.txt', {
+      start: 2,
+      end: 5
+    })
+    rs.pipe(through(function (chunk, enc, callback) {
+      t.same(chunk, new Buffer('llo '))
+      fs.unlink('/testra.txt', function (err) {
+        t.ok(!err, 'unlinked /testra.txt')
+        t.end()
+        callback()
+      })
+    }))
+  })
+})
+
+test('createReadStream enoent', function (t) {
+  var rs = fs.createReadStream('/test123.txt')
+  rs.on('error', function (err) {
+    t.ok(err)
+    t.same(err.code, 'ENOENT')
+    t.ok(true)
+    t.end()
+  })
+})
+
+}).call(this,require("buffer").Buffer)
+},{"../../chrome":28,"buffer":3,"tape":30,"through2":52}],62:[function(require,module,exports){
+(function (Buffer){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('read', function (t) {
+  fs.writeFile('/testread', 'hello worldy world', function (err) {
+    t.ok(!err, 'no error on write file')
+    fs.open('/testread', 'r', function (err, fd) {
+      t.ok(!err, 'no error on open')
+      var b = new Buffer(1024)
+      fs.read(fd, b, 0, 11, null, function (err, read) {
+        t.ok(!err, 'no error on read')
+        t.same(read, 11, 'read length is correct')
+        t.same(b.slice(0, 11), new Buffer('hello world'), 'buffer says hello world')
+        fs.read(fd, b, 0, 11, null, function (err, read) {
+          t.ok(!err, 'second read has no error')
+          t.same(read, 7, 'second read length is correct')
+          t.same(b.slice(0, 11), new Buffer('y worldorld'), 'second read text is correct')
+          fs.unlink('/testread', function (err) {
+            t.ok(!err)
+            t.end()
+          })
+        })
+      })
+    })
+  })
+})
+
+test('read test 2', function (t) {
+  fs.writeFile('/testread2', 'hello worldy world', function () {
+    fs.open('/testread2', 'r', function (err, fd) {
+      t.ok(!err)
+      var b = new Buffer(1024)
+      fs.read(fd, b, 0, 11, 0, function (err, read) {
+        t.ok(!err, 'no error on read')
+        t.same(read, 11, 'read length is correct')
+        t.same(b.slice(0, 11), new Buffer('hello world'), 'read hello world')
+        fs.read(fd, b, 0, 11, 1, function (err, read) {
+          t.ok(!err, 'no error on second read')
+          t.same(read, 11, 'second read length 11')
+          t.same(b.slice(0, 11), new Buffer('ello worldy'), 'second read data is the same')
+          fs.unlink('/testread2', function (err) {
+            t.ok(!err)
+            t.end()
+          })
+        })
+      })
+    })
+  })
+})
+
+}).call(this,require("buffer").Buffer)
+},{"../../chrome":28,"buffer":3,"tape":30}],63:[function(require,module,exports){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('readdir', function (t) {
+  fs.readdir('/', function (err, list) {
+    t.notOk(err)
+    t.same(list, [])
+
+    fs.readdir('/foo', function (err, list) {
+      t.ok(err)
+      t.notOk(list)
+      t.same(err.code, 'ENOENT')
+
+      fs.mkdir('/foo', function () {
+        fs.readdir('/', function (err, list) {
+          t.notOk(err)
+          t.same(list, ['foo'])
+
+          fs.readdir('/foo', function (err, list) {
+            t.notOk(err)
+            t.same(list, [])
+            fs.rmdir('/foo', function (err) {
+              t.notOk(err)
+              t.end()
+            })
+
+          })
+        })
+      })
+    })
+  })
+})
+
+test('readdir not recursive', function (t) {
+  fs.mkdir('/foo', function () {
+    fs.mkdir('/foo/bar', function () {
+      fs.mkdir('/foo/bar/baz', function () {
+        fs.readdir('/foo', function (err, list) {
+          t.notOk(err)
+          t.same(list, ['bar'])
+          fs.readdir('/foo/bar', function (err, list) {
+            t.notOk(err)
+            t.same(list, ['baz'])
+            fs.rmdir('/foo/bar/baz', function (err) {
+              t.notOk(err)
+              fs.rmdir('/foo/bar', function (err) {
+                t.notOk(err)
+                fs.rmdir('/foo', function (err) {
+                  t.notOk(err)
+                  t.end()
+                })
+              })
+            })
+          })
+        })
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"tape":30}],64:[function(require,module,exports){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('rename', function (t) {
+  fs.mkdir('/foo', function () {
+    fs.rename('/foo', '/bar', function (err) {
+      t.notOk(err, 'rename /foo /bar')
+
+      fs.readdir('/', function (err, list) {
+        t.notOk(err, 'readdir /foo /bar')
+        t.same(list, ['bar'], '/bar exists')
+        fs.rmdir('/bar', function (err) {
+          t.ok(!err, 'rrmdir /bar shouldn\'t have an error')
+          t.end()
+        })
+      })
+    })
+  })
+})
+
+// test('rename to non empty dir', function (t) {
+//   fs.mkdir('/foo', function () {
+//     fs.mkdir('/bar', function () {
+//       fs.mkdir('/bar/baz', function () {
+//         fs.rename('/foo', '/bar', function (err) {
+//           t.ok(err)
+//           t.same(err.code, 'ENOTEMPTY')
+//
+//           fs.readdir('/', function (err, list) {
+//             t.notOk(err)
+//             t.same(list.sort(), ['bar', 'foo'])
+//             t.end()
+//           })
+//         })
+//       })
+//     })
+//   })
+// })
+
+},{"../../chrome":28,"tape":30}],65:[function(require,module,exports){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('rmdir', function (t) {
+  fs.rmdir('/', function (err) {
+    t.ok(err, 'Delete / should fail')
+    t.same(err.code, 'EPERM', 'Error code should be EPERM')
+
+    fs.mkdir('/foorm', function () {
+      fs.rmdir('/foorm', function (err) {
+        t.notOk(err, 'rmdir /foorm should work')
+        fs.rmdir('/foorm', function (err) {
+          t.ok(err, 'rmdir /foorm should have an error')
+          t.same(err.code, 'ENOENT')
+          t.end()
+        })
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"tape":30}],66:[function(require,module,exports){
+(function (Buffer){
+var fs = require('../../chrome')
+var test = require('tape').test
+
+test('createWriteStream', function (t) {
+  var ws = fs.createWriteStream('/test1.txt')
+
+  ws.write('hello ')
+  ws.write('hi ')
+  ws.write('ho ')
+  ws.write('hey ')
+  ws.end('world')
+
+  ws.on('finish', function () {
+    fs.readFile('/test1.txt', 'utf-8', function (err, buf) {
+      t.ok(!err, 'Reading /test1.txt')
+      t.same(buf, 'hello hi ho hey world', 'Text is the same')
+      fs.unlink('/test1.txt', function (err) {
+        t.ok(!err, 'unlinked /test1.txt')
+        t.end()
+      })
+    })
+  })
+})
+
+test('createWriteStream big', function (t) {
+  var ws = fs.createWriteStream('/test2.txt')
+  var big = new Buffer(100 * 1024)
+
+  ws.end(big)
+
+  ws.on('finish', function () {
+    fs.readFile('/test2.txt', function (err, buf) {
+      t.ok(!err, 'Read Test Shouldn\'t fail')
+      t.same(buf, big, 'Buffers are equal')
+      fs.unlink('/test2.txt', function (err) {
+        t.ok(!err, 'unlinked /test2.txt')
+        t.end()
+      })
+    })
+  })
+})
+
+test('createWriteStream append', function (t) {
+  var ws = fs.createWriteStream('/test3.txt')
+
+  ws.write('hello ')
+  ws.end('world')
+
+  ws.on('finish', function () {
+    var ws = fs.createWriteStream('/test3.txt', {flags: 'a'})
+
+    ws.write(' hej ')
+    ws.end('verden')
+
+    ws.on('finish', function () {
+      fs.readFile('/test3.txt', 'utf-8', function (err, buf) {
+        t.ok(!err)
+        t.same(buf, 'hello world hej verden')
+        fs.unlink('/test3.txt', function (err) {
+          t.ok(!err, 'unlinked /test3.txt')
+          t.end()
+        })
+      })
+    })
+  })
+})
+
+test('createWriteStream not exists', function (t) {
+  var ws = fs.createWriteStream('/test4.txt')
+
+  ws.write('hello ')
+  ws.end('world')
+
+  ws.on('finish', function () {
+    var ws = fs.createWriteStream('/test4.txt', {flags: 'wx'})
+
+    ws.write(' hej ')
+    ws.end('verden')
+
+    ws.on('error', function (err) {
+      t.ok(err)
+      t.same(err.code, 'EEXIST')
+      fs.unlink('/test4.txt', function (err) {
+        t.ok(!err, 'unlinked /test4.txt')
+        t.end()
+      })
+    })
+  })
+})
+
+test('createWriteStream is dir', function (t) {
+  var ws = fs.createWriteStream('/')
+
+  ws.write('hello ')
+  ws.end('world')
+
+  ws.on('error', function (err) {
+    t.ok(err)
+    t.same(err.code, 'EISDIR')
+    t.end()
+  })
+})
+
+}).call(this,require("buffer").Buffer)
+},{"../../chrome":28,"buffer":3,"tape":30}],67:[function(require,module,exports){
+var fs = require('../../chrome')
+var mkdirp = require('mkdirp')
+var path = '/herp/derp'
+var assert = require('assert')
+
+mkdirp(path, { 'fs': fs }, function (success) {
+  fs.exists(path, function (exists) {
+    fs.rmdir(path, function (err) {
+      assert.equal(typeof err, 'undefined')
+      fs.rmdir('/herp', function (err) {
+        assert.equal(typeof err, 'undefined')
+        assert.ok('mkdirp works')
+        console.log('mkdirp-test success')
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"assert":2,"mkdirp":29}],68:[function(require,module,exports){
+(function (Buffer){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+var fs = require('../../chrome')
+var join = require('path').join
+
+var appfilename = join(common.tmpDir, 'append.txt')
+
+common.error('appending to ' + appfilename)
+
+var currentFileData = 'ABCD' // eslint-disable-line
+
+var n = 220 // eslint-disable-line
+var s = 'asdpfkasdlfjsdkljfklsdjfklasjdfklasdjfasdkljf' +
+        'asdpfkasdlfjsdkljfklsdjfklasjdfklasdjfasdkljf' +
+        'sdfgs34234234asdfasdfasdfasdfasdfasfasdfsdfasdf' +
+        'asdpfkasdlfjsdkljfklsdjfklasjdfklasdjfasdkljf' +
+        'asdpfkasdlfjsdkljfklsdjfklasjdfklasdjfasdkljf' +
+        'sdfgs34234234asdfasdfasdfasdfasdfasfasdfsdfasdf' +
+        'end123end123\n'
+
+// test that empty file will be created and have content added
+fs.appendFile(appfilename, currentFileData, function (e) {
+  console.log(e)
+  if (e) throw e
+
+  var ncallbacks = 1
+  common.error('appended to file')
+
+  fs.readFile(appfilename, function (e, buffer) {
+    console.log('readFile 1' + e)
+    if (e) throw e
+    common.error('file read')
+    ncallbacks++
+    assert.equal(Buffer.byteLength(currentFileData), buffer.length)
+    assert.equal(2, ncallbacks, 'test-fs-append-file-1')
+    console.log('test-fs-append-file 1 success')
+    // test that appends data to a non empty file
+    fs.appendFile(appfilename, s, function (e) {
+      console.log('appendFile 2')
+      console.log(e)
+      if (e) throw e
+
+      var ncallbacks2 = 1
+      common.error('appended to file2')
+
+      fs.readFile(appfilename, function (e, buffer) {
+        if (e) throw e
+        common.error('file2 read')
+        ncallbacks2++
+        assert.equal(Buffer.byteLength(s) + currentFileData.length, buffer.length)
+        fs.unlink(appfilename, function (err) {
+          if (err) {
+            assert.fail(err)
+          }
+          assert.equal(2, ncallbacks2, 'test-fs-append-file-2')
+          console.log('test-fs-append-file 2 success')
+        })
+      })
+    })
+  })
+})
+
+// test that appendFile accepts buffers
+var filename3 = join(common.tmpDir, 'append3.txt')
+fs.writeFile(filename3, currentFileData, function (e) {
+  var buf = new Buffer(s, 'utf8')
+  common.error('appending to ' + filename3)
+
+  fs.appendFile(filename3, buf, function (e) {
+    console.log(e)
+    if (e) throw e
+
+    var ncallbacks3 = 1
+    common.error('appended to file3')
+
+    fs.readFile(filename3, function (e, buffer) {
+      if (e) throw e
+      common.error('file3 read')
+      ncallbacks3++
+      assert.equal(buf.length + currentFileData.length, buffer.length)
+      fs.unlink(filename3, function (err) {
+        if (err) {
+          assert.fail(err)
+        }
+        assert.equal(2, ncallbacks3, 'test-fs-append-file-3')
+        console.log('test-fs-append-file-3 success')
+      })
+    })
+  })
+})
+
+}).call(this,require("buffer").Buffer)
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],69:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+var path = require('path')
+var fs = require('../../chrome')
+
+var emptyFile = path.join(common.fixturesDir, 'empty.txt')
+
+fs.writeFile(emptyFile, '', function (e) {
+  if (e) {
+    console.log(e)
+    throw e
+  }
+  fs.open(emptyFile, 'r', function (error, fd) {
+    assert.ifError(error)
+
+    var read = fs.createReadStream(emptyFile, { 'fd': fd })
+    read.once('data', function () {
+      throw new Error('data event should not emit')
+    })
+
+    read.once('end', function () {
+      console.log('end event 1')
+    })
+  })
+
+  fs.open(emptyFile, 'r', function (error, fd) {
+    assert.ifError(error)
+
+    var read = fs.createReadStream(emptyFile, { 'fd': fd })
+    read.pause()
+
+    read.once('data', function () {
+      throw new Error('data event should not emit')
+    })
+
+    var readEmit = false
+    read.once('end', function () {
+      readEmit = true
+      console.log('end event 2')
+    })
+    read.close(function () {
+      fs.unlink(emptyFile, function (err) {
+        if (err) {
+          assert.fail(err)
+        }
+        console.log('test-fs-empty-readStream-1 success')
+      })
+    })
+    setTimeout(assert.equal, 100, readEmit, false)
+  })
+})
+
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],70:[function(require,module,exports){
+var fs = require('../../chrome')
+var assert = require('assert')
+var exists
+var doesNotExist
+var f = '/test-fs-exists.txt'
+fs.writeFile(f, 'Some lorum impsum', function () {
+  assert.ok(true, 'Write with string and callback')
+  fs.exists(f + '-NO', function (y) {
+    doesNotExist = y
+    fs.exists(f, function (y) {
+      exists = y
+      fs.unlink(f, function (err) {
+        if (err) {
+          assert.fail(err)
+        }
+        assert.strictEqual(exists, true)
+        assert.strictEqual(doesNotExist, false)
+        assert.ok(true, 'delete and callback')
+        console.log('test-fs-exists success')
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"assert":2}],71:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+var fs = require('../../chrome')
+
+var pathname = common.tmpDir + 'test1'
+var ncalls = 0
+var ncalls2 = 0
+
+fs.mkdir(pathname, function (err) {
+  assert.equal(err, null)
+  ncalls++
+  fs.mkdir(pathname, function (err) {
+    assert.equal(err.code, 'EEXIST')
+    ncalls++
+    assert.equal(ncalls, 2)
+    fs.rmdir(pathname, function () {
+      console.log('test-fs-mkdir 1 success')
+    })
+  })
+})
+
+// Test for mod creation
+var pathname2 = common.tmpDir + '/test2'
+
+fs.mkdir(pathname2, 511, function (err) {
+  assert.equal(err, null)
+  ncalls2++
+  fs.exists(pathname2, function (exists) {
+    ncalls2++
+    fs.rmdir(pathname2, function () {
+      assert(ncalls2, 2)
+      console.log('test-fs-mkdir 2 success')
+    })
+  })
+})
+
+},{"../../chrome":28,"../common":54,"assert":2}],72:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+var path = require('path')
+var Buffer = require('buffer').Buffer
+var fs = require('../../chrome')
+var filepath = path.join(common.fixturesDir, 'buffedx.txt')
+var expected = 'xyz\n'
+var bufferAsync = new Buffer(expected.length)
+
+fs.writeFile(filepath, expected, function (err) {
+  assert.ok(!err)
+  fs.open(filepath, 'r', '0644', function (err, fd) {
+    assert.ok(!err)
+    fs.read(fd, bufferAsync, 0, expected.length, 0, function (err, bytesRead, data) {
+      assert.equal(err, null)
+      assert.equal(bytesRead, expected.length, 'buffers are not the same size')
+      assert.deepEqual(data, new Buffer(expected))
+      fs.unlink(filepath, function (err) {
+        assert.ok(!err)
+        console.log('test-fs-read-buffer success')
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],73:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var fs = require('../../chrome')
+var assert = require('assert')
+var path = require('path')
+
+var common = require('../common')
+
+var file = path.join(common.tmpDir, 'read_stream_fd_test.txt')
+var input = 'hello world'
+var output = ''
+var stream
+
+fs.writeFile(file, input, function (e) {
+  if (e) {
+    console.log(e)
+    throw e
+  }
+  fs.open(file, 'r', function (err, fd) {
+    if (err) {
+      assert.fail(err)
+    }
+    stream = fs.createReadStream(null, { fd: fd, encoding: 'utf8' })
+    stream.on('data', function (data) {
+      output += data
+    }).on('close', function () {
+      fs.unlink(file, function (err) {
+        if (err) {
+          assert.fail(err)
+        }
+        console.log('test-fs-read-stream-fd success')
+      })
+      assert.equal(output, input)
+    })
+  })
+})
+
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],74:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+
+// TODO Improved this test. test_ca.pem is too small. A proper test would
+// great a large utf8 (with multibyte chars) file and stream it in,
+// performing sanity checks throughout.
+
+var path = require('path')
+var fs = require('../../chrome')
+var fn = path.join(common.fixturesDir, 'x-stream.txt')
+var rangeFile = path.join(common.fixturesDir, 'elipses.txt')
+
+var elipses = '\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026'
+
+var x = 'xyz'
+var callbacks = { open: 0, end: 0, close: 0 }
+var paused = false
+
+fs.writeFile(fn, x, function (err) {
+  assert.equal(err, null)
+  // var ncallbacks1 = 1
+
+  var file = fs.ReadStream(fn)
+  file.on('open', function (fd) {
+    file.length = 0
+    callbacks.open++
+    assert.equal('object', typeof fd)
+    assert.ok(file.readable)
+    // GH-535
+    file.pause()
+    file.resume()
+    file.pause()
+    file.resume()
+  })
+
+  file.on('data', function (data) {
+    assert.ok(data instanceof Object)
+    assert.ok(!paused)
+    file.length += data.length
+    paused = true
+    file.pause()
+
+    setTimeout(function () {
+      paused = false
+      file.resume()
+    }, 10)
+  })
+
+  file.on('end', function (chunk) {
+    callbacks.end++
+  })
+
+  file.on('close', function () {
+    callbacks.close++
+    fs.unlink(fn, function (err) {
+      if (err) {
+        assert.fail(err)
+      }
+      console.log('test-fs-read-stream 1 success')
+    })
+  })
+  /* process.on('exit', function () {
+    assert.equal(1, callbacks.open)
+    assert.equal(1, callbacks.end)
+    assert.equal(2, callbacks.close)
+    assert.equal(30000, file.length)
+    assert.equal(10000, file3.length)
+    console.error('ok')
+  }) */
+})
+
+fs.writeFile(rangeFile, elipses, function (e) {
+  if (e) {
+    console.log(e)
+    throw e
+  }
+  var file3 = fs.createReadStream(rangeFile, {encoding: 'utf8'})
+  file3.length = 0
+  file3.on('data', function (data) {
+    // assert.equal('string', typeof (data))
+    file3.length += data.length
+
+    for (var i = 0; i < data.length; i++) {
+      // http://www.fileformat.info/info/unicode/char/2026/index.htm
+      assert.equal('\u2026', data[i])
+    }
+  })
+
+  file3.on('close', function () {
+    callbacks.close++
+    fs.unlink(rangeFile, function (err) {
+      if (err) {
+        assert.fail(err)
+      }
+      assert.equal(2, callbacks.close)
+      console.log('test-fs-read-stream-2 success')
+    })
+  })
+})
+/* var file4 = fs.createReadStream(rangeFile, {bufferSize: 1, start: 1, end: 2})
+var contentRead = ''
+file4.on('data', function (data) {
+  contentRead += data.toString('utf-8')
+})
+file4.on('end', function (data) {
+  assert.equal(contentRead, 'yz')
+})
+
+var file5 = fs.createReadStream(rangeFile, {bufferSize: 1, start: 1})
+file5.data = ''
+file5.on('data', function (data) {
+  file5.data += data.toString('utf-8')
+})
+file5.on('end', function () {
+  assert.equal(file5.data, 'yz\n')
+})
+
+// https://github.com/joyent/node/issues/2320
+var file6 = fs.createReadStream(rangeFile, {bufferSize: 1.23, start: 1})
+file6.data = ''
+file6.on('data', function (data) {
+  file6.data += data.toString('utf-8')
+})
+file6.on('end', function () {
+  assert.equal(file6.data, 'yz\n')
+})
+
+assert.throws(function () {
+  fs.createReadStream(rangeFile, {start: 10, end: 2})
+}, /start must be <= end/)
+
+var stream = fs.createReadStream(rangeFile, { start: 0, end: 0 })
+stream.data = ''
+
+stream.on('data', function (chunk) {
+  stream.data += chunk
+})
+
+stream.on('end', function () {
+  assert.equal('x', stream.data)
+})
+
+// pause and then resume immediately.
+var pauseRes = fs.createReadStream(rangeFile)
+pauseRes.pause()
+pauseRes.resume()
+
+var file7 = fs.createReadStream(rangeFile, {autoClose: false })
+file7.on('data', function () {})
+file7.on('end', function () {
+  process.nextTick(function () {
+    assert(!file7.closed)
+    assert(!file7.destroyed)
+    file7Next()
+  })
+})
+
+function file7Next () {
+  // This will tell us if the fd is usable again or not.
+  file7 = fs.createReadStream(null, {fd: file7.fd, start: 0 })
+  file7.data = ''
+  file7.on('data', function (data) {
+    file7.data += data
+  })
+  file7.on('end', function (err) {
+    assert.equal(err, null)
+    assert.equal(file7.data, 'xyz\n')
+  })
+}
+
+// Just to make sure autoClose won't close the stream because of error.
+var file8 = fs.createReadStream(null, {fd: 13337, autoClose: false })
+file8.on('data', function () {})
+file8.on('error', common.mustCall(function () {}))
+
+// Make sure stream is destroyed when file does not exist.
+var file9 = fs.createReadStream('/path/to/file/that/does/not/exist')
+file9.on('data', function () {})
+file9.on('error', common.mustCall(function () {}))
+
+process.on('exit', function () {
+  assert(file7.closed)
+  assert(file7.destroyed)
+
+  assert(!file8.closed)
+  assert(!file8.destroyed)
+  assert(file8.fd)
+
+  assert(!file9.closed)
+  assert(file9.destroyed)
+})
+ */
+
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],75:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+var path = require('path')
+var fs = require('../../chrome')
+var filepath = path.join(common.tmpDir, 'x.txt')
+var expected = 'xyz\n'
+
+fs.writeFile(filepath, expected, function (err) {
+  assert.ok(!err)
+  fs.open(filepath, 'r', '0644', function (err, fd) {
+    assert.ok(!err)
+    // fs.read(fd, buffer, 0, 8192, -1, function (err, len, data) {
+    fs.read(fd, expected.length, 0, 'utf-8', function (err, str, bytesRead) {
+      assert.ok(!err)
+      assert.equal(str, expected, 'read value failed')
+      assert.equal(bytesRead, expected.length, 'read length failed')
+      fs.unlink(filepath, function (err) {
+        assert.ok(!err)
+        console.log('test-fs-read success')
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],76:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+var path = require('path')
+var fs = require('../../chrome')
+var readdirDir = path.join(common.tmpDir, 'readdir')
+var files = ['test.txt']
+console.log('readdir ' + readdirDir)
+
+fs.mkdir(readdirDir, function (err) {
+  assert.equal(err, null)
+  fs.writeFile(readdirDir + '/test.txt', '', function (err) {
+    assert.equal(err, null)
+    fs.readdir(readdirDir, function (err, f) {
+      assert.equal(err, null)
+      console.dir(f)
+      assert.deepEqual(files, f)
+      fs.unlink(readdirDir + '/test.txt', function (err) {
+        assert.equal(err, null)
+        fs.rmdir(readdirDir, function (err) {
+          assert.equal(err, null)
+          console.log('test-fs-readdir 1 success')
+        })
+      })
+    })
+  })
+})
+
+// readdir() on file should throw Error
+// *nix error ENOENT not supported
+// https://github.com/joyent/node/issues/1869
+var readdirDir2 = path.join(common.tmpDir, 'readdir2')
+
+fs.mkdir(readdirDir2, function (err) {
+  assert.equal(err, null)
+  fs.writeFile(readdirDir2 + '/test2.txt', '', function (err) {
+    assert.equal(err, null)
+    fs.readdir(readdirDir2 + '/test2.txt', function (err, f) {
+      assert.ok(err, 'Expected error from file readdir')
+      fs.unlink(readdirDir2 + '/test2.txt', function (err) {
+        assert.equal(err, null)
+        fs.rmdir(readdirDir2, function (err) {
+          assert.equal(err, null)
+          console.log('test-fs-readdir 2 success')
+        })
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],77:[function(require,module,exports){
+(function (global){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var assert = require('assert')
+var fs = require('../../chrome')
+var got_error = false
+var success_count = 0
+var dirlocation = '/'
+fs.stat(dirlocation, function (err, stats) {
+  if (err) {
+    got_error = true
+    console.log(err)
+  } else {
+    console.dir(stats)
+    assert.ok(stats.mtime instanceof Date)
+    success_count++
+  }
+  assert(this === global)
+})
+
+fs.stat(dirlocation, function (err, stats) {
+  if (err) {
+    got_error = true
+  }
+  assert.ok(stats.hasOwnProperty('blksize'))
+  assert.ok(stats.hasOwnProperty('blocks'))
+})
+/* fs.lstat('.', function (err, stats) {
+  if (err) {
+    got_error = true
+  } else {
+    console.dir(stats)
+    assert.ok(stats.mtime instanceof Date)
+    success_count++
+  }
+  assert(this === global)
+})
+*/
+// fstat
+fs.open(dirlocation, 'r', undefined, function (err, fd) {
+  console.log(err)
+  assert.ok(!err, 'Error on fs open ')
+
+  assert.ok(fd, 'fd is an object')
+  fs.fstat(fd, function (err, stats) {
+    if (err) {
+      got_error = true
+      console.log(err)
+    } else {
+      console.dir(stats)
+      assert.ok(stats.mtime instanceof Date)
+      success_count++
+      fs.close(fd)
+    }
+    assert(this === global)
+  })
+
+  assert(this === global)
+})
+
+var filelocation = '/test-fs-stat.txt'
+fs.writeFile(filelocation, 'Some lorum impsum', function () {
+  assert.ok(true, 'Write with string and callback')
+  fs.stat(filelocation, function (err, s) {
+    if (err) {
+      got_error = true
+      console.log(err)
+    } else {
+      console.dir(s)
+      success_count++
+
+      console.log('isDirectory: ' + JSON.stringify(s.isDirectory()))
+      assert.equal(false, s.isDirectory())
+
+      console.log('isFile: ' + JSON.stringify(s.isFile()))
+      assert.equal(true, s.isFile())
+
+      console.log('isSocket: ' + JSON.stringify(s.isSocket()))
+      assert.equal(false, s.isSocket())
+
+      console.log('isBlockDevice: ' + JSON.stringify(s.isBlockDevice()))
+      assert.equal(false, s.isBlockDevice())
+
+      console.log('isCharacterDevice: ' + JSON.stringify(s.isCharacterDevice()))
+      assert.equal(false, s.isCharacterDevice())
+
+      console.log('isFIFO: ' + JSON.stringify(s.isFIFO()))
+      assert.equal(false, s.isFIFO())
+
+      console.log('isSymbolicLink: ' + JSON.stringify(s.isSymbolicLink()))
+      assert.equal(false, s.isSymbolicLink())
+
+      assert.ok(s.mtime instanceof Date)
+    }
+    fs.unlink(filelocation, function (err) {
+      if (err) {
+        assert.fail(err)
+      }
+      assert.equal(3, success_count)
+      assert.equal(false, got_error)
+      assert.ok(true, 'delete and callback')
+      console.log('test-fs-stat success')
+    })
+  })
+})
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+},{"../../chrome":28,"assert":2}],78:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+var path = require('path')
+var Buffer = require('buffer').Buffer
+var fs = require('../../chrome')
+var filename = path.join(common.tmpDir, 'writebuffer.txt')
+var expected = new Buffer('hello buffer')
+var openCalled = 0
+var writeCalled = 0
+
+fs.open(filename, 'w', '0644', function (err, fd) {
+  openCalled++
+  assert.equal(err, null)
+
+  fs.write(fd, expected, 0, expected.length, null, function (err, written) {
+    writeCalled++
+    assert.equal(err, null)
+    assert.equal(expected.length, written)
+    fs.close(fd, function (err, info) {
+      assert.equal(err, null)
+      fs.readFile(filename, 'utf8', function (err, found) {
+        assert.equal(err, null)
+        assert.deepEqual(expected.toString(), found)
+        fs.unlink(filename, function (err) {
+          assert.equal(err, null)
+          assert.equal(1, openCalled)
+          assert.equal(1, writeCalled)
+          console.log('test-fs-write-buffer-1 success')
+        })
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],79:[function(require,module,exports){
+(function (Buffer){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+var fs = require('../../chrome')
+var join = require('path').join
+
+var filename = join(common.tmpDir, 'test.txt')
+
+common.error('writing to ' + filename)
+
+var n = 220
+var s = 'asdpfkasdlfjsd;kljfklsdjfklasjdfklasdjfasdkljf' +
+        'asdpfkasdlfjsd;kljfklsdjfklasjdfklasdjfasdkljf' +
+        'sdfgs34234234asdfasdfasdfasdfasdfasfasdfsdfasdf' +
+        'asdpfkasdlfjsd;kljfklsdjfklasjdfklasdjfasdkljf' +
+        'asdpfkasdlfjsd;kljfklsdjfklasjdfklasdjfasdkljf' +
+        'sdfgs34234234asdfasdfasdfasdfasdfasfasdfsdfasdf' +
+        'end123end123\n'
+
+fs.writeFile(filename, s, function (e) {
+  if (e) {
+    console.log(e)
+    throw e
+  }
+  var ncallbacks1 = 1
+  common.error('file written')
+
+  fs.readFile(filename, function (e, buffer) {
+    if (e) throw e
+    common.error('file read')
+    ncallbacks1++
+    assert.equal(Buffer.byteLength(s), buffer.length)
+    fs.unlink(filename, function (err) {
+      if (err) {
+        assert.fail(err)
+      }
+      assert.equal(2, ncallbacks1, 'test-fs-write-file-1')
+      console.log('test-fs-write-file-1 success')
+    })
+  })
+})
+
+// test that writeFile accepts buffers
+var filename2 = join(common.tmpDir, 'test2.txt')
+var buf = new Buffer(s, 'utf8')
+common.error('writing to ' + filename2)
+
+fs.writeFile(filename2, buf, function (e) {
+  if (e) {
+    console.log(e)
+    throw e
+  }
+
+  var ncallbacks2 = 1
+  common.error('file2 written')
+
+  fs.readFile(filename2, function (e, buffer) {
+    if (e) {
+      console.log(e)
+      console.log('file2 READERROR')
+      throw e
+    }
+    common.error('file2 read')
+    ncallbacks2++
+    assert.equal(buf.length, buffer.length)
+    fs.unlink(filename2, function (err) {
+      if (err) {
+        assert.fail(err)
+      }
+      assert.equal(2, ncallbacks2, 'test-fs-write-file-2')
+      console.log('test-fs-write-file-2 success')
+    })
+  })
+})
+
+// test that writeFile accepts numbers.
+var filename3 = join(common.tmpDir, 'test3.txt')
+common.error('writing to ' + filename3)
+
+var m = '0600'
+fs.writeFile(filename3, n, { mode: m }, function (e) {
+  if (e) {
+    console.log(e)
+    throw e
+  }
+
+  // windows permissions aren't unix
+  /* if (process.platform !== 'win32') {
+    var st = fs.statSync(filename3)
+    assert.equal(st.mode & 0700, m)
+  }*/
+
+  var ncallbacks3 = 1
+  common.error('file3 written')
+
+  fs.readFile(filename3, function (e, buffer) {
+    if (e) {
+      console.log(e)
+      console.log('file3 READERROR')
+      throw e
+    }
+    common.error('file3 read')
+    ncallbacks3++
+    assert.equal(Buffer.byteLength('' + n), buffer.length)
+    fs.unlink(filename3, function (err) {
+      if (err) {
+        assert.fail(err)
+      }
+      assert.equal(2, ncallbacks3, 'test-fs-write-file-3')
+      console.log('test-fs-write-file-3 success')
+    })
+  })
+})
+
+}).call(this,require("buffer").Buffer)
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],80:[function(require,module,exports){
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+var common = require('../common')
+var assert = require('assert')
+var path = require('path')
+var Buffer = require('buffer').Buffer // eslint-disable-line
+var fs = require('../../chrome')
+var fn = path.join(common.tmpDir, 'write.txt')
+var fn2 = path.join(common.tmpDir, 'write2.txt')
+var expected = 'ümlaut.' // eslint-disable-line 
+var constants = require('constants')
+
+fs.open(fn, 'w', '0644', function (err, fd) {
+  assert.equal(err, null)
+  fs.write(fd, '', 0, 'utf8', function (err, written) {
+    assert.equal(err, null)
+    assert.equal(0, written)
+  })
+  fs.write(fd, expected, 0, 'utf8', function (err, written) {
+    assert.equal(err, null)
+    assert.equal(Buffer.byteLength(expected), written)
+    fs.close(fd, function (err) {
+      assert.equal(err, null)
+      fs.readFile(fn, 'utf8', function (err, found) {
+        assert.equal(err, null)
+        assert.equal(expected, found, 'Umlaut test')
+        fs.unlink(fn, function (err) {
+          assert.equal(err, null)
+          console.log('test-fs-write 1 success')
+        })
+      })
+    })
+  })
+})
+
+fs.open(fn2, constants.O_CREAT | constants.O_WRONLY | constants.O_TRUNC, '0644',
+function (err, fd) {
+  assert.equal(err, null)
+  fs.write(fd, '', 0, 'utf8', function (err, written) {
+    assert.equal(err, null)
+    assert.equal(0, written)
+  })
+  fs.write(fd, expected, 0, 'utf8', function (err, written) {
+    assert.equal(err, null)
+    assert.equal(Buffer.byteLength(expected), written)
+    fs.close(fd, function (err) {
+      assert.equal(err, null)
+      fs.readFile(fn2, 'utf8', function (err, found) {
+        assert.equal(err, null)
+        assert.equal(expected, found, 'Umlaut test')
+        fs.unlink(fn2, function (err) {
+          assert.equal(err, null)
+          console.log('test-fs-write 2 success')
+        })
+      })
+    })
+  })
+})
+
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"constants":7,"path":11}]},{},[53]);
