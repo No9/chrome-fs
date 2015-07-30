@@ -577,7 +577,6 @@ exports.readFile = function (path, options, cb) {
   } else if (!util.isObject(options)) {
     throw new TypeError('Bad arguments')
   }
-
   var encoding = options.encoding
   assertEncoding(encoding)
   window.requestFileSystem(
@@ -594,6 +593,8 @@ exports.readFile = function (path, options, cb) {
             fileReader.onload = function (evt) {
               if (options.encoding === null) {
                 window.setTimeout(callback, 0, null, new Buffer(this.result, 'binary'))
+              } else if (options.encoding === 'hex') {
+                window.setTimeout(callback, 0, null, new Buffer(this.result).toString('hex'))
               } else {
                 window.setTimeout(callback, 0, null, this.result)
               }
@@ -604,11 +605,19 @@ exports.readFile = function (path, options, cb) {
 
             if (file.type === 'text/plain') {
               fileReader.readAsText(file)
-            } else if (file.type === 'application/octet-binary') {
+            } else {
               fileReader.readAsArrayBuffer(file)
             }
           })
-        }, callback)
+        }, function (err) {
+          if (err.name === 'TypeMismatchError') {
+            var eisdir = new Error()
+            eisdir.code = 'EISDIR'
+            callback(eisdir)
+          } else {
+            callback(err)
+          }
+        })
     }, callback)
 }
 
@@ -719,8 +728,11 @@ exports.writeFile = function (path, data, options, cb) {
     window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
     function (cfs) {
       var opts = {}
-      if (flag === 'w') {
+      if (flag.indexOf('w') > -1) {
         opts = {create: true}
+      }
+      if (flag.indexOf('x') > -1) {
+        opts.exclusive = true
       }
       cfs.root.getFile(
         path,
@@ -728,7 +740,7 @@ exports.writeFile = function (path, data, options, cb) {
         function (fileEntry) {
           // if its a write then we get the file writer
           // otherwise we get the file because 'standards'
-          if (flag === 'w') {
+          if (flag.indexOf('w') > -1) {
             fileEntry.createWriter(function (fileWriter) {
               fileWriter.onerror = callback
               if (typeof callback === 'function') {
@@ -739,7 +751,12 @@ exports.writeFile = function (path, data, options, cb) {
                 fileWriter.onwriteend = function () {}
               }
               fileWriter.onprogress = function () {}
-              var blob = new Blob([data], {type: 'text/plain'}) // eslint-disable-line
+              var blob
+              if (typeof data === 'string') {
+                blob = new Blob([data], {type: 'text/plain'}) // eslint-disable-line
+              } else {
+                blob = new Blob([data], {type: 'application/octet-binary'}) // eslint-disable-line
+              }
               fileWriter.write(blob)
             }, function (evt) {
               if (evt.type !== 'writeend') {
