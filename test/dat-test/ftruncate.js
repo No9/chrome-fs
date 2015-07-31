@@ -6,7 +6,6 @@ test('ftruncate', function (t) {
     fs.open('/testftruncate.txt', 'w', function (err, fd) {
       t.ok(!err, 'Open failed')
       fs.ftruncate(fd, 10000, function (err) {
-        console.log(err)
         t.ok(!err, 'first truncate')
         fs.fstat(fd, function (err, stat) {
           t.ok(!err, 'fstat error')

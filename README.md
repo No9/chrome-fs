@@ -119,6 +119,9 @@ Files have `size` and `last modified` but directories have no size and default t
 
 Currently only UTF-8 is supported
 
+### File Extensions
+
+There seems to be an issue around saving files in chomefs 
 
 # Contributors 
 

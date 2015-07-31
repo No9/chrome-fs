@@ -459,6 +459,7 @@ exports.open = function (path, flags, mode, callback) {
           // otherwise we get the file because 'standards'
           if (flags.indexOf('w') > -1 || flags.indexOf('a') > -1) {
             fileEntry.createWriter(function (fileWriter) {
+              fileWriter.flags = flags
               fileWriter.fullPath = fileEntry.fullPath
               fds[fileWriter.fullPath] = {}
               fds[fileWriter.fullPath].status = 'open'
@@ -651,14 +652,27 @@ exports.write = function (fd, buffer, offset, length, position, callback) {
     if (fd.readyState > 0) {
       // when the ready state is greater than 1 we have to wait until the write end has finished
       // but this causes the stream to keep sending write events.
+      // So currently fs and writestream have there own implementations
       fd.onwriteend = function () {
+        if (position !== null) {
+          fd.seek(position)
+        }
+        if (fd.flags.indexOf('a') > -1) {
+          fd.seek(fd.length)
+        }
         fd.write(bufblob)
+        callback(null, tmpbuf.length, tmpbuf)
       }
-      callback(null, tmpbuf.length)
     } else {
+      if (position !== null) {
+        fd.seek(position)
+      }
+      if (fd.flags.indexOf('a') > -1) {
+        fd.seek(fd.length)
+      }
       fd.write(bufblob)
       if (typeof callback === 'function') {
-        callback(null, tmpbuf.length)
+        callback(null, tmpbuf.length, tmpbuf)
       }
     }
   } else {
