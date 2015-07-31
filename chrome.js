@@ -125,7 +125,7 @@ exports.chown = function (path, uid, gid, callback) {
 }
 
 exports.fchown = function (fd, uid, gid, callback) {
-  this.chown(fd.filePath, uid, gid, callback)
+  this.chown(fd.fullPath, uid, gid, callback)
 }
 
 exports.chmod = function (path, mode, callback) {
@@ -143,7 +143,7 @@ exports.chmod = function (path, mode, callback) {
 }
 
 exports.fchmod = function (fd, mode, callback) {
-  this.chmod(fd.filePath, mode, callback)
+  this.chmod(fd.fullPath, mode, callback)
 }
 
 exports.exists = function (path, callback) {
@@ -333,7 +333,9 @@ exports.ftruncate = function (fd, len, callback) {
   }
   var cb = makeCallback(callback)
   fd.onerror = cb
-  fd.onwriteend = cb
+  fd.onwriteend = function () {
+    cb()
+  }
   fd.truncate(len)
 }
 
@@ -423,7 +425,7 @@ exports.stat = function (path, callback) {
 }
 
 exports.fstat = function (fd, callback) {
-  this.stat(fd.filePath, callback)
+  this.stat(fd.fullPath, callback)
 }
 
 exports.open = function (path, flags, mode, callback) {
@@ -479,7 +481,7 @@ exports.open = function (path, flags, mode, callback) {
               callback(eisdir)
             } else {
               var dird = {}
-              dird.filePath = path
+              dird.fullPath = path
               callback(null, dird)
             }
 

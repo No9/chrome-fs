@@ -94,11 +94,11 @@ test('overwrite file', function (t) {
 })
 
 test('cannot writeFile to dir', function (t) {
-  fs.mkdir('/test', function () {
-    fs.writeFile('/test', 'hello', function (err) {
+  fs.mkdir('/testdir', function () {
+    fs.writeFile('/testdir', 'hello', function (err) {
       t.ok(err)
       t.same(err.code, 'EISDIR')
-      fs.rmdir('/test', function (err) {
+      fs.rmdir('/testdir', function (err) {
         t.ok(!err)
         t.end()
       })
