@@ -758,6 +758,8 @@ exports.writeFile = function (path, data, options, cb) {
           if (flag.indexOf('w') > -1) {
             fileEntry.createWriter(function (fileWriter) {
               fileWriter.onerror = callback
+              // make sure we have an empty file
+              // fileWriter.truncate(0)
               if (typeof callback === 'function') {
                 fileWriter.onwriteend = function (evt) {
                   window.setTimeout(callback, 0)
@@ -770,7 +772,12 @@ exports.writeFile = function (path, data, options, cb) {
               if (typeof data === 'string') {
                 blob = new Blob([data], {type: 'text/plain'}) // eslint-disable-line
               } else {
-                blob = new Blob([data], {type: 'application/octet-binary'}) // eslint-disable-line
+                if (options.encoding === 'hex') {
+                  // convert the hex data to a string then save it.
+                  blob = new Blob([new Buffer(data, 'hex').toString('hex')], {type: 'text/plain'}) // eslint-disable-line
+                } else {
+                  blob = new Blob([data], {type: 'application/octet-binary'}) // eslint-disable-line
+                }
               }
               fileWriter.write(blob)
             }, function (evt) {
@@ -781,9 +788,20 @@ exports.writeFile = function (path, data, options, cb) {
               }
             })
           } else {
-            callback('incorrect flag')
+            var err = new Error()
+            err.code = 'UNKNOWN'
+            err.message = 'flag not supported: ' + flag
+            callback(err)
           }
-        }, function () {})
+        }, function (err) {
+          if (err.name === 'TypeMismatchError') {
+            var eisdir = Error()
+            eisdir.code = 'EISDIR'
+            callback(eisdir)
+          } else {
+            callback(err)
+          }
+        })
     }, function (evt) {
           if (evt.type !== 'writeend') {
             callback(evt)

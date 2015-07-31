@@ -6298,6 +6298,8 @@ exports.writeFile = function (path, data, options, cb) {
           if (flag.indexOf('w') > -1) {
             fileEntry.createWriter(function (fileWriter) {
               fileWriter.onerror = callback
+              // make sure we have an empty file
+              // fileWriter.truncate(0)
               if (typeof callback === 'function') {
                 fileWriter.onwriteend = function (evt) {
                   window.setTimeout(callback, 0)
@@ -6310,7 +6312,12 @@ exports.writeFile = function (path, data, options, cb) {
               if (typeof data === 'string') {
                 blob = new Blob([data], {type: 'text/plain'}) // eslint-disable-line
               } else {
-                blob = new Blob([data], {type: 'application/octet-binary'}) // eslint-disable-line
+                if (options.encoding === 'hex') {
+                  // convert the hex data to a string then save it.
+                  blob = new Blob([new Buffer(data, 'hex').toString('hex')], {type: 'text/plain'}) // eslint-disable-line
+                } else {
+                  blob = new Blob([data], {type: 'application/octet-binary'}) // eslint-disable-line
+                }
               }
               fileWriter.write(blob)
             }, function (evt) {
@@ -6321,9 +6328,20 @@ exports.writeFile = function (path, data, options, cb) {
               }
             })
           } else {
-            callback('incorrect flag')
+            var err = new Error()
+            err.code = 'UNKNOWN'
+            err.message = 'flag not supported: ' + flag
+            callback(err)
           }
-        }, function () {})
+        }, function (err) {
+          if (err.name === 'TypeMismatchError') {
+            var eisdir = Error()
+            eisdir.code = 'EISDIR'
+            callback(eisdir)
+          } else {
+            callback(err)
+          }
+        })
     }, function (evt) {
           if (evt.type !== 'writeend') {
             callback(evt)
@@ -8304,9 +8322,10 @@ require('../dat-test/rename')
 require('../dat-test/read-file')
 require('../dat-test/unlink')
 require('../dat-test/truncate')
+require('../dat-test/write-file')
 require('../libs/mkdirp-test')
 
-},{"../dat-test/append-file":55,"../dat-test/close":56,"../dat-test/exists":57,"../dat-test/mkdir":58,"../dat-test/open":59,"../dat-test/read":62,"../dat-test/read-file":60,"../dat-test/read-stream":61,"../dat-test/readdir":63,"../dat-test/rename":64,"../dat-test/rmdir":65,"../dat-test/truncate":66,"../dat-test/unlink":67,"../dat-test/write-stream":68,"../libs/mkdirp-test":69,"../simple/test-fs-append-file":70,"../simple/test-fs-empty-read-stream":71,"../simple/test-fs-exists":72,"../simple/test-fs-mkdir":73,"../simple/test-fs-read":77,"../simple/test-fs-read-buffer":74,"../simple/test-fs-read-stream":76,"../simple/test-fs-read-stream-fd":75,"../simple/test-fs-readdir":78,"../simple/test-fs-stat":79,"../simple/test-fs-write":82,"../simple/test-fs-write-buffer":80,"../simple/test-fs-write-file":81}],54:[function(require,module,exports){
+},{"../dat-test/append-file":55,"../dat-test/close":56,"../dat-test/exists":57,"../dat-test/mkdir":58,"../dat-test/open":59,"../dat-test/read":62,"../dat-test/read-file":60,"../dat-test/read-stream":61,"../dat-test/readdir":63,"../dat-test/rename":64,"../dat-test/rmdir":65,"../dat-test/truncate":66,"../dat-test/unlink":67,"../dat-test/write-file":68,"../dat-test/write-stream":69,"../libs/mkdirp-test":70,"../simple/test-fs-append-file":71,"../simple/test-fs-empty-read-stream":72,"../simple/test-fs-exists":73,"../simple/test-fs-mkdir":74,"../simple/test-fs-read":78,"../simple/test-fs-read-buffer":75,"../simple/test-fs-read-stream":77,"../simple/test-fs-read-stream-fd":76,"../simple/test-fs-readdir":79,"../simple/test-fs-stat":80,"../simple/test-fs-write":83,"../simple/test-fs-write-buffer":81,"../simple/test-fs-write-file":82}],54:[function(require,module,exports){
 exports.tmpDir = '/'
 exports.error = function (msg) {
   console.log(msg)
@@ -8777,7 +8796,6 @@ var fs = require('../../chrome')
 test('truncate', function (t) {
   fs.writeFile('/test.txt', new Buffer(1), function () {
     fs.truncate('/test.txt', 10000, function (err) {
-      console.log(err)
       t.ok(!err, 'truncate 10000 to grow')
       fs.stat('/test.txt', function (err, stat) {
         t.ok(!err, 'no error on first stat')
@@ -8836,6 +8854,117 @@ test('cannot unlink dir', function (t) {
 })
 
 },{"../../chrome":28,"tape":30}],68:[function(require,module,exports){
+(function (Buffer){
+var test = require('tape').test
+var fs = require('../../chrome')
+
+test('writeFile', function (t) {
+  fs.writeFile('/test.txt', 'hello', function (err) {
+    t.notOk(err)
+    fs.readFile('/test.txt', function (err, data) {
+      t.notOk(err)
+      t.same(data.toString(), 'hello')
+      fs.stat('/test.txt', function (err, stat) {
+        t.notOk(err)
+        t.same(stat.size, 5)
+        t.ok(stat.isFile())
+        fs.unlink('/test.txt', function (err) {
+          t.ok(!err, 'unlinked /test.txt')
+          t.end()
+        })
+      })
+    })
+  })
+})
+
+// test('writeFile + encoding', function (t) {
+//   fs.writeFile('/foo.txt', new Buffer('foo'), function (err) {
+//     t.notOk(err)
+//     fs.readFile('/foo.txt', function (err, data) {
+//       t.notOk(err)
+//       t.same(data.toString(), 'foo', 'data is foo')
+//       fs.writeFile('/foo.txt', '68656c6c6f', 'hex', function (err) {
+//         t.notOk(err)
+//         fs.readFile('/foo.txt', function (err, data) {
+//           t.notOk(err)
+//           t.same(data.toString(), 'hello', 'encoding isn\'t equal')
+//           fs.unlink('/foo.txt', function (err) {
+//             t.ok(!err, 'unlinked /foo.txt')
+//             t.end()
+//           })
+//         })
+//       })
+//     })
+//   })
+// })
+
+test('multiple writeFile', function (t) {
+  fs.writeFile('/mfoo.txt', new Buffer('foo'), function (err) {
+    t.notOk(err)
+    fs.writeFile('/mfoo.txt', new Buffer('bar'), function (err) {
+      t.notOk(err)
+      fs.writeFile('/mfoo.txt', new Buffer('baz'), function (err) {
+        t.notOk(err)
+        console.log('WROTTE BAZ')
+        fs.readFile('/mfoo.txt', function (err, data) {
+          t.notOk(err)
+          t.same(data.toString(), 'baz')
+          fs.unlink('/mfoo.txt', function (err) {
+            t.ok(!err, 'unlinked /foo.txt')
+            t.end()
+          })
+        })
+      })
+    })
+  })
+})
+
+test('writeFile + mode', function (t) {
+  fs.writeFile('/foo', new Buffer('foo'), {mode: '0644'}, function (err) {
+    t.notOk(err)
+    fs.stat('/foo', function (err, stat) {
+      // Removed modeq as it isn't supported.
+      t.notOk(err)
+      fs.unlink('/foo', function (err) {
+        t.ok(!err, 'unlinked /foo')
+        t.end()
+      })
+    })
+  })
+})
+
+test('overwrite file', function (t) {
+  fs.writeFile('/test.txt', 'foo', function (err) {
+    t.notOk(err)
+    fs.writeFile('/test.txt', 'bar', function (err) {
+      t.notOk(err)
+      fs.readFile('/test.txt', function (err, data) {
+        t.notOk(err)
+        t.same(data.toString(), 'bar')
+        fs.unlink('/test.txt', function (err) {
+          t.ok(!err, 'unlinked /test.txt')
+          t.end()
+        })
+      })
+    })
+  })
+})
+
+test('cannot writeFile to dir', function (t) {
+  fs.mkdir('/test', function () {
+    fs.writeFile('/test', 'hello', function (err) {
+      t.ok(err)
+      t.same(err.code, 'EISDIR')
+      fs.rmdir('/test', function (err) {
+        t.ok(!err)
+        t.end()
+      })
+    })
+  })
+})
+
+}).call(this,require("buffer").Buffer)
+},{"../../chrome":28,"buffer":3,"tape":30}],69:[function(require,module,exports){
 (function (Buffer){
 var fs = require('../../chrome')
 var test = require('tape').test
@@ -8941,7 +9070,7 @@ test('createWriteStream is dir', function (t) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"buffer":3,"tape":30}],69:[function(require,module,exports){
+},{"../../chrome":28,"buffer":3,"tape":30}],70:[function(require,module,exports){
 var fs = require('../../chrome')
 var mkdirp = require('mkdirp')
 var path = '/herp/derp'
@@ -8960,7 +9089,7 @@ mkdirp(path, { 'fs': fs }, function (success) {
   })
 })
 
-},{"../../chrome":28,"assert":2,"mkdirp":29}],70:[function(require,module,exports){
+},{"../../chrome":28,"assert":2,"mkdirp":29}],71:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -9075,7 +9204,7 @@ fs.writeFile(filename3, currentFileData, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],71:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],72:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9149,7 +9278,7 @@ fs.writeFile(emptyFile, '', function (e) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],72:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],73:[function(require,module,exports){
 var fs = require('../../chrome')
 var assert = require('assert')
 var exists
@@ -9174,7 +9303,7 @@ fs.writeFile(f, 'Some lorum impsum', function () {
   })
 })
 
-},{"../../chrome":28,"assert":2}],73:[function(require,module,exports){
+},{"../../chrome":28,"assert":2}],74:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9232,7 +9361,7 @@ fs.mkdir(pathname2, 511, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2}],74:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2}],75:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9279,7 +9408,7 @@ fs.writeFile(filepath, expected, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],75:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],76:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9336,7 +9465,7 @@ fs.writeFile(file, input, function (e) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],76:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],77:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9551,7 +9680,7 @@ process.on('exit', function () {
 })
  */
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],77:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],78:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9597,7 +9726,7 @@ fs.writeFile(filepath, expected, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],78:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],79:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9668,7 +9797,7 @@ fs.mkdir(readdirDir2, function (err) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"path":11}],79:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"path":11}],80:[function(require,module,exports){
 (function (global){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -9795,7 +9924,7 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
 })
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../../chrome":28,"assert":2}],80:[function(require,module,exports){
+},{"../../chrome":28,"assert":2}],81:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -9851,7 +9980,7 @@ fs.open(filename, 'w', '0644', function (err, fd) {
   })
 })
 
-},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],81:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],82:[function(require,module,exports){
 (function (Buffer){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -9988,7 +10117,7 @@ fs.writeFile(filename3, n, { mode: m }, function (e) {
 })
 
 }).call(this,require("buffer").Buffer)
-},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],82:[function(require,module,exports){
+},{"../../chrome":28,"../common":54,"assert":2,"buffer":3,"path":11}],83:[function(require,module,exports){
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a

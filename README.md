@@ -115,6 +115,11 @@ Any chown call *will not* be reflected in `stat`
 Best effort has been made to support `stat` but the Chrome File System is not a complete implementation.
 Files have `size` and `last modified` but directories have no size and default to the start of epoc for last modified. 
 
+### Encoding 
+
+Currently only UTF-8 is supported
+
+
 # Contributors 
 
 anton whalley @no9 
