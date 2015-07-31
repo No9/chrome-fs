@@ -8677,23 +8677,23 @@ test('createReadStream big file', function (t) {
   })
 })
 
-// test('createReadStream random access', function (t) {
-//   fs.writeFile('/testra.txt', 'hello world', function (err) {
-//     t.ok(!err)
-//     var rs = fs.createReadStream('/testra.txt', {
-//       start: 2,
-//       end: 5
-//     })
-//     rs.pipe(through(function (chunk, enc, callback) {
-//       t.same(chunk, new Buffer('llo '))
-//       fs.unlink('/testra.txt', function (err) {
-//         t.ok(!err, 'unlinked /testra.txt')
-//         t.end()
-//         callback()
-//       })
-//     }))
-//   })
-// })
+test('createReadStream random access', function (t) {
+  fs.writeFile('/testra.txt', 'hello world', function (err) {
+    t.ok(!err)
+    var rs = fs.createReadStream('/testra.txt', {
+      start: 2,
+      end: 5
+    })
+    rs.pipe(through(function (chunk, enc, callback) {
+      t.same(chunk, new Buffer('llo '))
+      fs.unlink('/testra.txt', function (err) {
+        t.ok(!err, 'unlinked /testra.txt')
+        t.end()
+        callback()
+      })
+    }))
+  })
+})
 
 test('createReadStream enoent', function (t) {
   var rs = fs.createReadStream('/test123.txt')
