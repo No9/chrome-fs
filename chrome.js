@@ -425,7 +425,13 @@ exports.stat = function (path, callback) {
 }
 
 exports.fstat = function (fd, callback) {
-  this.stat(fd.fullPath, callback)
+  if (typeof fds[fd.fullPath] === 'undefined') {
+    var ebadf = new Error()
+    ebadf.code = 'EBADF'
+    window.setTimeout(callback, 0, ebadf)
+  } else {
+    this.stat(fd.fullPath, callback)
+  }
 }
 
 exports.open = function (path, flags, mode, callback) {
@@ -461,6 +467,7 @@ exports.open = function (path, flags, mode, callback) {
             }, callback)
           } else {
             fileEntry.file(function (file) {
+              file.fullPath = fileEntry.fullPath
               fds[file.fullPath] = {}
               fds[file.fullPath].status = 'open'
               file.key = file.fullPath
