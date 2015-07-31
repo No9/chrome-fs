@@ -1002,16 +1002,15 @@ ReadStream.prototype._read = function (n) {
     return
   }
 
-  if (this.pos === this.fd.size) {
-    return this.push(null)
-  }
-  this.pos = this.fd.size
-  if (this.fd.size === 0) {
+  if (this.pos > this.fd.size) {
     return this.push(null)
   }
 
+  if (this.fd.size === 0) {
+    return this.push(null)
+  }
   var self = this
-  // Sketchy implementation that pushes the whole file to the the stream
+  // Sketchy implementation that pushes the whole file to the stream
   // But maybe fd has a size that we can iterate to?
   var onread = function (err, length, data) {
     if (err) {
@@ -1026,12 +1025,14 @@ ReadStream.prototype._read = function (n) {
 
   // calculate the offset so read doesn't carry too much
   if (this.end === 0) {
-    this.end = this.fd.size
+    this.end = this._readableState.highWaterMark
   } else {
     this.end = this.end - this.start + 1
   }
 
-  exports.read(this.fd, new Buffer(this.fd.size), this.start, this.end, 0, onread)
+  // exports.read(this.fd, new Buffer(this.fd.size), this.start, this.end, 0, onread)
+  exports.read(this.fd, new Buffer(this.fd.size), this.start, this.end, this.pos, onread)
+  this.pos += this._readableState.highWaterMark
 // this.once('finish', this.close)
 }
 

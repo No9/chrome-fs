@@ -32,6 +32,7 @@ fs.stat(dirlocation, function (err, stats) {
     console.dir(stats)
     assert.ok(stats.mtime instanceof Date)
     success_count++
+    console.log('One ++')
   }
   assert(this === global)
 })
@@ -42,38 +43,6 @@ fs.stat(dirlocation, function (err, stats) {
   }
   assert.ok(stats.hasOwnProperty('blksize'))
   assert.ok(stats.hasOwnProperty('blocks'))
-})
-/* fs.lstat('.', function (err, stats) {
-  if (err) {
-    got_error = true
-  } else {
-    console.dir(stats)
-    assert.ok(stats.mtime instanceof Date)
-    success_count++
-  }
-  assert(this === global)
-})
-*/
-// fstat
-fs.open(dirlocation, 'r', undefined, function (err, fd) {
-  console.log(err)
-  assert.ok(!err, 'Error on fs open ')
-
-  assert.ok(fd, 'fd is an object')
-  fs.fstat(fd, function (err, stats) {
-    if (err) {
-      got_error = true
-      console.log(err)
-    } else {
-      console.dir(stats)
-      assert.ok(stats.mtime instanceof Date)
-      success_count++
-      fs.close(fd)
-    }
-    assert(this === global)
-  })
-
-  assert(this === global)
 })
 
 var filelocation = '/test-fs-stat.txt'
@@ -114,7 +83,7 @@ fs.writeFile(filelocation, 'Some lorum impsum', function () {
       if (err) {
         assert.fail(err)
       }
-      assert.equal(3, success_count)
+      setTimeout(assert.equal, 10, 2, success_count)
       assert.equal(false, got_error)
       assert.ok(true, 'delete and callback')
       console.log('test-fs-stat success')
