@@ -391,9 +391,6 @@ exports.stat = function (path, callback) {
           statval.isFIFO = function () { return false }
           statval.isSymbolicLink = function () { return false }
           callback(null, statval)
-        }, function (err) {
-          console.log(err)
-          callback(err)
         })
       }, function (err) {
         if (err.name === 'TypeMismatchError') {
@@ -829,12 +826,12 @@ exports.writeFile = function (path, data, options, cb) {
           }
         })
     }, function (evt) {
-          if (evt.type !== 'writeend') {
-            callback(evt)
-          } else {
-            callback()
-          }
-        })
+      if (evt.type !== 'writeend') {
+        callback(evt)
+      } else {
+        callback()
+      }
+    })
 }
 
 exports.appendFile = function (path, data, options, cb) {
@@ -918,6 +915,7 @@ function ReadStream (path, options) {
   if (!(this instanceof ReadStream)) {
     return new ReadStream(path, options)
   }
+
   // debugger // eslint-disable-line
   // a little bit bigger buffer and water marks by default
   options = util._extend({
@@ -1023,6 +1021,7 @@ ReadStream.prototype._read = function (n) {
       self.emit('error', err)
     }
     self.push(data)
+    // self.once('finish', self.close)
   }
 
   // calculate the offset so read doesn't carry too much
@@ -1036,21 +1035,18 @@ ReadStream.prototype._read = function (n) {
   exports.read(this.fd, new Buffer(this.fd.size), this.start, this.end, this.pos, onread)
   this.pos += this._readableState.highWaterMark
 
-// this.once('finish', this.close)
 }
 
 ReadStream.prototype.destroy = function () {
   if (this.destroyed) {
     return
   }
-
   this.destroyed = true
   this.close()
 }
 
 ReadStream.prototype.close = function (cb) {
   var self = this
-  console.log('closing in close')
   if (cb) {
     this.once('close', cb)
   }
@@ -1115,7 +1111,6 @@ WriteStream.prototype.open = function () {
   this.writelist = []
   this.currentbuffersize = 0
   this.tds = 0
-
   exports.open(this.path, this.flags, this.mode, function (er, fd) {
     if (er) {
       this.destroy()
@@ -1171,26 +1166,18 @@ WriteStream.prototype._write = function (data, encoding, callbk) {
   }
 
   this.writelist.push(data)
-  this.currentbuffersize += data.length
-  callback(null, data.length)
-
-  if (this.currentbuffersize > 10240) {
-    this._intenalwrite()
-  }
-
   this.tds += data.length
+  callback(null, data.length)
 
 }
 
 WriteStream.prototype._intenalwrite = function () {
-  // filewriter isn't setup so lets ignore it and
-  // see if we try again
+  // if fd is null then don't write
   if (this.fd === null) {
     return
   }
   var dataToWrite = Buffer.concat(this.writelist)
   this.writelist = []
-  this.currentbuffersize = 0
   var initblob = new Blob([dataToWrite]) // eslint-disable-line
   this.fd.write(initblob)
 }

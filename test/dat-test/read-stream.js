@@ -20,25 +20,20 @@ test('createReadStream', function (t) {
 test('createReadStream big file', function (t) {
   var big = new Buffer(100 * 1024)
 
-  fs.writeFile('/test2.txt', big, function (err) {
+  fs.writeFile('/testrs2.txt', big, function (err) {
     t.ok(!err)
     var actual = new Buffer(0)
-    var rs = fs.createReadStream('/test2.txt')
-    // We can use through because the file API doesn't stream
-    // so all the data is in through chunck
-    // This will break when seeking is implemented
+    var rs = fs.createReadStream('/testrs2.txt')
+
     rs.pipe(through(function (chunk, enc, callback) {
       actual = Buffer.concat([actual, chunk])
-      console.log('actual: ' + actual.length)
-      console.log(big.length)
       callback()
-      if (actual.length === big.length) {
-        rs.close()
-      }
-    })).on('close', function () {
+    }))
+    // explicitly assign the close event.
+    rs.on('close', function () {
       t.same(actual, big)
-      fs.unlink('/test2.txt', function (err) {
-        t.ok(!err, 'unlinked /test2.txt')
+      fs.unlink('/testrs2.txt', function (err) {
+        t.ok(!err, 'unlinked /testrs2.txt')
         t.end()
       })
     })

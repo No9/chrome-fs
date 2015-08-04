@@ -4,7 +4,7 @@ var assert = require('assert')
 
 var dllocation = 'master.tar.gz'
 var req = https.request('https://github.com/chromiumify/chromiumify.github.io/archive/master.tar.gz', function (res) {
-  console.log(res.statusCode)
+  assert.equal(res.statusCode, 200)
   var ws = fs.createWriteStream(dllocation)
   var filesize = 0
   ws.on('finish', function () {
