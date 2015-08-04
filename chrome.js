@@ -1111,6 +1111,7 @@ WriteStream.prototype.open = function () {
   this.writelist = []
   this.currentbuffersize = 0
   this.tds = 0
+
   exports.open(this.path, this.flags, this.mode, function (er, fd) {
     if (er) {
       this.destroy()
@@ -1166,18 +1167,26 @@ WriteStream.prototype._write = function (data, encoding, callbk) {
   }
 
   this.writelist.push(data)
-  this.tds += data.length
+  this.currentbuffersize += data.length
   callback(null, data.length)
+
+  if (this.currentbuffersize > 10240) {
+    this._intenalwrite()
+  }
+
+  this.tds += data.length
 
 }
 
 WriteStream.prototype._intenalwrite = function () {
-  // if fd is null then don't write
+  // filewriter isn't setup so lets ignore it and
+  // see if we try again
   if (this.fd === null) {
     return
   }
   var dataToWrite = Buffer.concat(this.writelist)
   this.writelist = []
+  this.currentbuffersize = 0
   var initblob = new Blob([dataToWrite]) // eslint-disable-line
   this.fd.write(initblob)
 }

@@ -12838,7 +12838,6 @@ test('createReadStream big file', function (t) {
 
     rs.pipe(through(function (chunk, enc, callback) {
       actual = Buffer.concat([actual, chunk])
-      console.log('actual: ' + actual.length)
       callback()
     }))
     // explicitly assign the close event.
@@ -13455,14 +13454,14 @@ var req = https.request('https://github.com/chromiumify/chromiumify.github.io/ar
         assert.fail('Stat shouln\'t fial')
       }
       assert.equal(stat.size, filesize, 'file sizes are equal:' + stat.size + ':' + filesize)
-      fs.unlink(dllocation, function (err) {
-        if (err) {
-          console.log(err)
-          assert.fail('Stat shouln\'t failed')
-        } else {
-          console.log('https-test success')
-        }
-      })
+      // fs.unlink(dllocation, function (err) {
+      //   if (err) {
+      //     console.log(err)
+      //     assert.fail('Stat shouln\'t failed')
+      //   } else {
+      //     console.log('https-test success')
+      //   }
+      // })
     })
   })
   res.on('data', function (data) {
