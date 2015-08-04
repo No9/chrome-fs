@@ -391,6 +391,9 @@ exports.stat = function (path, callback) {
           statval.isFIFO = function () { return false }
           statval.isSymbolicLink = function () { return false }
           callback(null, statval)
+        }, function (err) {
+          console.log(err)
+          callback(err)
         })
       }, function (err) {
         if (err.name === 'TypeMismatchError') {
@@ -1020,7 +1023,6 @@ ReadStream.prototype._read = function (n) {
       self.emit('error', err)
     }
     self.push(data)
-    self.once('finish', self.close)
   }
 
   // calculate the offset so read doesn't carry too much
@@ -1033,6 +1035,7 @@ ReadStream.prototype._read = function (n) {
   // exports.read(this.fd, new Buffer(this.fd.size), this.start, this.end, 0, onread)
   exports.read(this.fd, new Buffer(this.fd.size), this.start, this.end, this.pos, onread)
   this.pos += this._readableState.highWaterMark
+
 // this.once('finish', this.close)
 }
 
@@ -1047,6 +1050,7 @@ ReadStream.prototype.destroy = function () {
 
 ReadStream.prototype.close = function (cb) {
   var self = this
+  console.log('closing in close')
   if (cb) {
     this.once('close', cb)
   }
@@ -1108,6 +1112,10 @@ function WriteStream (path, options) {
 exports.FileWriteStream = exports.WriteStream // support the legacy name
 
 WriteStream.prototype.open = function () {
+  this.writelist = []
+  this.currentbuffersize = 0
+  this.tds = 0
+
   exports.open(this.path, this.flags, this.mode, function (er, fd) {
     if (er) {
       this.destroy()
@@ -1115,6 +1123,9 @@ WriteStream.prototype.open = function () {
       return
     }
     this.fd = fd
+    if (this.flags.indexOf('a') > -1) {
+      this.fd.seek(this.fd.length)
+    }
     this.emit('open', fd)
   }.bind(this))
 }
@@ -1139,6 +1150,7 @@ WriteStream.prototype._write = function (data, encoding, callbk) {
   this.toCall = callback
   this.isWriting = false
   var self = this
+
   this.fd.onerror = function (err) {
     if (err.name === 'TypeMismatchError') {
       // It's a write on a directory
@@ -1158,49 +1170,48 @@ WriteStream.prototype._write = function (data, encoding, callbk) {
     }
   }
 
-  var bufblob = new Blob([data], {type: 'application/octet-binary'}) // eslint-disable-line
-  if (this.fd.readyState > 0) {
-    if (typeof this.tmpbuffer === 'undefined') {
-      this.tmpbuffer = []
-    }
-    this.tmpbuffer += data
-    this.isWriting = false
-  } else {
-    if (typeof this.fd.write === 'function') {
-      if (this.flags.indexOf('a') > -1) {
-        this.fd.seek(this.fd.length)
-      }
-      this.fd.write(bufblob)
-      this.bytesWritten += data.length
-      callback(null, bufblob.length)
-    } else {
-      if (typeof this.tmpbuffer === 'undefined') {
-        this.tmpbuffer = []
-      }
-      this.tmpbuffer += data
-      this.isWriting = false
-    }
+  this.writelist.push(data)
+  this.currentbuffersize += data.length
+  callback(null, data.length)
+
+  if (this.currentbuffersize > 10240) {
+    this._intenalwrite()
   }
-  // When the ws.end() is called directly without an 'write'
-  // this.fd.onwriteend = function (e) { throws an is null error
-  if (this.fd !== null) {
-    this.fd.onwriteend = function (e) {
-      if (!self.isWriting) {
-        if (self.tmpbuffer.length > 0) {
-          self.isWriting = true
-          var tmpblob = new Blob([self.tmpbuffer], {type: 'application/octet-binary'}) // eslint-disable-line
-          self.tmpbuffer = []
-          self.fd.write(tmpblob)
-          callback(null, tmpblob.length)
-          self.bytesWritten += self.tmpbuffer.length
-        }
-      }
-    }
+
+  this.tds += data.length
+
+}
+
+WriteStream.prototype._intenalwrite = function () {
+  // filewriter isn't setup so lets ignore it and
+  // see if we try again
+  if (this.fd === null) {
+    return
   }
+  var dataToWrite = Buffer.concat(this.writelist)
+  this.writelist = []
+  this.currentbuffersize = 0
+  var initblob = new Blob([dataToWrite]) // eslint-disable-line
+  this.fd.write(initblob)
 }
 
 WriteStream.prototype.destroy = ReadStream.prototype.destroy
-WriteStream.prototype.close = ReadStream.prototype.close
+WriteStream.prototype.close = function (cb) {
+  this._intenalwrite()
+  var self = this
+  if (cb) {
+    this.once('close', cb)
+  }
+  if (this.closed) {
+    this.emit('close')
+  }
+  this.closed = true
+  close()
+  function close (fd) {
+    self.emit('close')
+    self.fd = null
+  }
+}
 
 // There is no shutdown() for files.
 WriteStream.prototype.destroySoon = WriteStream.prototype.end

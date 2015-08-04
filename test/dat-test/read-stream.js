@@ -30,7 +30,11 @@ test('createReadStream big file', function (t) {
     rs.pipe(through(function (chunk, enc, callback) {
       actual = Buffer.concat([actual, chunk])
       console.log('actual: ' + actual.length)
+      console.log(big.length)
       callback()
+      if (actual.length === big.length) {
+        rs.close()
+      }
     })).on('close', function () {
       t.same(actual, big)
       fs.unlink('/test2.txt', function (err) {
