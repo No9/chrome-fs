@@ -1170,7 +1170,7 @@ WriteStream.prototype._write = function (data, encoding, callbk) {
   this.currentbuffersize += data.length
   callback(null, data.length)
 
-  if (this.currentbuffersize > 10240) {
+  if (this.currentbuffersize > 1048576) {
     this._intenalwrite()
   }
 
