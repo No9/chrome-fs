@@ -110,10 +110,6 @@ function modeNum (m, def) {
   return undefined
 }
 
-exports.utimes = function (name, now, mtime, cb) {
-  cb()
-}
-
 exports.chown = function (path, uid, gid, callback) {
   resolve(path)
   callback = makeCallback(callback)
@@ -126,6 +122,10 @@ exports.chown = function (path, uid, gid, callback) {
       callback('File does not exist')
     }
   })
+}
+
+exports.utimes = function (name, now, mtime, cb) {
+  cb()
 }
 
 exports.fchown = function (fd, uid, gid, callback) {
@@ -345,7 +345,7 @@ exports.ftruncate = function (fd, len, callback) {
 
 exports.truncate = function (path, len, callback) {
   if (util.isObject(path)) {
-    return this.ftruncate(path, len, callback)
+    return exports.ftruncate(path, len, callback)
   }
   if (util.isFunction(len)) {
     callback = len
@@ -355,7 +355,7 @@ exports.truncate = function (path, len, callback) {
   }
 
   callback = maybeCallback(callback)
-  this.open(path, 'w', function (er, fd) {
+  exports.open(path, 'w', function (er, fd) {
     if (er) return callback(er)
     fd.onwriteend = function (evt) {
       if (evt.type !== 'writeend') {
@@ -434,7 +434,7 @@ exports.fstat = function (fd, callback) {
     ebadf.code = 'EBADF'
     window.setTimeout(callback, 0, ebadf)
   } else {
-    this.stat(fd.fullPath, callback)
+    exports.stat(fd.fullPath, callback)
   }
 }
 
@@ -923,7 +923,7 @@ function ReadStream (path, options) {
   // debugger // eslint-disable-line
   // a little bit bigger buffer and water marks by default
   options = util._extend({
-    highWaterMark: 64 * 1024
+    highWaterMark: 33554432 // 1024 * 1024
   }, options || {})
 
   Readable.call(this, options)
@@ -1075,6 +1075,7 @@ function WriteStream (path, options) {
   if (!(this instanceof WriteStream)) {
     return new WriteStream(path, options)
   }
+
   options = options || {}
 
   Writable.call(this, options)
@@ -1129,7 +1130,7 @@ WriteStream.prototype.open = function () {
     this.emit('open', fd)
   }.bind(this))
 }
-
+WriteStream.prototype.totalsize = 0
 WriteStream.prototype._write = function (data, encoding, callbk) {
   if (!util.isBuffer(data)) {
     return this.emit('error', new Error('Invalid data'))
@@ -1169,12 +1170,12 @@ WriteStream.prototype._write = function (data, encoding, callbk) {
       callback(err)
     }
   }
-
+  this.totalsize += data.length
   this.writelist.push(data)
   this.currentbuffersize += data.length
   callback(null, data.length)
 
-  if (this.currentbuffersize > 1048576) {
+  if (this.currentbuffersize > 134217728) {
     this._intenalwrite()
   }
 
@@ -1188,11 +1189,17 @@ WriteStream.prototype._intenalwrite = function () {
   if (this.fd === null) {
     return
   }
+
+  if (this.fd.readystate > 0) {
+    return
+  }
   var dataToWrite = Buffer.concat(this.writelist)
   this.writelist = []
   this.currentbuffersize = 0
   var initblob = new Blob([dataToWrite]) // eslint-disable-line
-  this.fd.write(initblob)
+  if (typeof this.fd.write !== 'undefined') {
+    this.fd.write(initblob)
+  }
 }
 
 WriteStream.prototype.destroy = ReadStream.prototype.destroy
