@@ -110,12 +110,16 @@ function modeNum (m, def) {
   return undefined
 }
 
+exports.utimes = function (name, now, mtime, cb) {
+  cb()
+}
+
 exports.chown = function (path, uid, gid, callback) {
   resolve(path)
   callback = makeCallback(callback)
   if (!nullCheck(path, callback)) return
 
-  this.exists(path, function (exists) {
+  exports.exists(path, function (exists) {
     if (exists) {
       callback()
     } else {
@@ -125,7 +129,7 @@ exports.chown = function (path, uid, gid, callback) {
 }
 
 exports.fchown = function (fd, uid, gid, callback) {
-  this.chown(fd.fullPath, uid, gid, callback)
+  exports.chown(fd.fullPath, uid, gid, callback)
 }
 
 exports.chmod = function (path, mode, callback) {
@@ -133,7 +137,7 @@ exports.chmod = function (path, mode, callback) {
   callback = makeCallback(callback)
   if (!nullCheck(path, callback)) return
 
-  this.exists(path, function (exists) {
+  exports.exists(path, function (exists) {
     if (exists) {
       callback()
     } else {
@@ -143,7 +147,7 @@ exports.chmod = function (path, mode, callback) {
 }
 
 exports.fchmod = function (fd, mode, callback) {
-  this.chmod(fd.fullPath, mode, callback)
+  exports.chmod(fd.fullPath, mode, callback)
 }
 
 exports.exists = function (path, callback) {

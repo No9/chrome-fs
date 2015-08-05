@@ -8170,12 +8170,16 @@ function modeNum (m, def) {
   return undefined
 }
 
+exports.utimes = function (name, now, mtime, cb) {
+  cb()
+}
+
 exports.chown = function (path, uid, gid, callback) {
   resolve(path)
   callback = makeCallback(callback)
   if (!nullCheck(path, callback)) return
 
-  this.exists(path, function (exists) {
+  exports.exists(path, function (exists) {
     if (exists) {
       callback()
     } else {
@@ -8185,7 +8189,7 @@ exports.chown = function (path, uid, gid, callback) {
 }
 
 exports.fchown = function (fd, uid, gid, callback) {
-  this.chown(fd.fullPath, uid, gid, callback)
+  exports.chown(fd.fullPath, uid, gid, callback)
 }
 
 exports.chmod = function (path, mode, callback) {
@@ -8193,7 +8197,7 @@ exports.chmod = function (path, mode, callback) {
   callback = makeCallback(callback)
   if (!nullCheck(path, callback)) return
 
-  this.exists(path, function (exists) {
+  exports.exists(path, function (exists) {
     if (exists) {
       callback()
     } else {
@@ -8203,7 +8207,7 @@ exports.chmod = function (path, mode, callback) {
 }
 
 exports.fchmod = function (fd, mode, callback) {
-  this.chmod(fd.fullPath, mode, callback)
+  exports.chmod(fd.fullPath, mode, callback)
 }
 
 exports.exists = function (path, callback) {
@@ -9171,6 +9175,7 @@ WriteStream.prototype.open = function () {
   this.writelist = []
   this.currentbuffersize = 0
   this.tds = 0
+
   exports.open(this.path, this.flags, this.mode, function (er, fd) {
     if (er) {
       this.destroy()
@@ -9226,18 +9231,26 @@ WriteStream.prototype._write = function (data, encoding, callbk) {
   }
 
   this.writelist.push(data)
-  this.tds += data.length
+  this.currentbuffersize += data.length
   callback(null, data.length)
+
+  if (this.currentbuffersize > 1048576) {
+    this._intenalwrite()
+  }
+
+  this.tds += data.length
 
 }
 
 WriteStream.prototype._intenalwrite = function () {
-  // if fd is null then don't write
+  // filewriter isn't setup so lets ignore it and
+  // see if we try again
   if (this.fd === null) {
     return
   }
   var dataToWrite = Buffer.concat(this.writelist)
   this.writelist = []
+  this.currentbuffersize = 0
   var initblob = new Blob([dataToWrite]) // eslint-disable-line
   this.fd.write(initblob)
 }
@@ -13440,43 +13453,45 @@ test('write + append', function (t) {
 },{"../../chrome":47,"buffer":4,"tape":49}],92:[function(require,module,exports){
 var https = require('https')
 var fs = require('../../chrome')
-var assert = require('assert')
+var test = require('tape').test
 
-var dllocation = 'master.tar.gz'
-var req = https.request('https://github.com/chromiumify/chromiumify.github.io/archive/master.tar.gz', function (res) {
-  assert.equal(res.statusCode, 200)
-  var ws = fs.createWriteStream(dllocation)
-  var filesize = 0
-  ws.on('finish', function () {
-    fs.stat(dllocation, function (err, stat) {
-      if (err) {
-        console.log(err)
-        assert.fail('Stat shouln\'t fial')
-      }
-      assert.equal(stat.size, filesize, 'file sizes are equal:' + stat.size + ':' + filesize)
-      // fs.unlink(dllocation, function (err) {
-      //   if (err) {
-      //     console.log(err)
-      //     assert.fail('Stat shouln\'t failed')
-      //   } else {
-      //     console.log('https-test success')
-      //   }
-      // })
+test('Download Tar', function (t) {
+  var dllocation = 'master.tar.gz'
+  var req = https.request('https://github.com/chromiumify/chromiumify.github.io/archive/master.tar.gz', function (res) {
+    t.equal(res.statusCode, 200)
+    var ws = fs.createWriteStream(dllocation)
+    var filesize = 0
+    ws.on('finish', function () {
+      fs.stat(dllocation, function (err, stat) {
+        if (err) {
+          console.log(err)
+          t.fail('Stat shouln\'t fial')
+        }
+        t.equal(stat.size, filesize, 'file sizes are equal:' + stat.size + ':' + filesize)
+        fs.unlink(dllocation, function (err) {
+          if (err) {
+            console.log(err)
+            t.fail('Stat shouln\'t failed')
+          } else {
+            console.log('https-test success')
+          }
+        })
+      })
     })
+    res.on('data', function (data) {
+      filesize += data.length
+    })
+    res.pipe(ws)
+
   })
-  res.on('data', function (data) {
-    filesize += data.length
+  req.end()
+
+  req.on('error', function (e) {
+    console.error(e)
   })
-  res.pipe(ws)
-
-})
-req.end()
-
-req.on('error', function (e) {
-  console.error(e)
 })
 
-},{"../../chrome":47,"assert":2,"https":10}],93:[function(require,module,exports){
+},{"../../chrome":47,"https":10,"tape":49}],93:[function(require,module,exports){
 var fs = require('../../chrome')
 var mkdirp = require('mkdirp')
 var path = '/herp/derp'
