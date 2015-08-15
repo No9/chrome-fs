@@ -439,12 +439,39 @@ exports.fstat = function (fd, callback) {
 }
 
 exports.open = function (path, flags, mode, callback) {
-  path = resolve(path)
+  var isEntry = false
+  if (!nullCheck(path, callback)) return
+  if (typeof path === 'object') {
+    isEntry = true
+  } else {
+    path = resolve(path)
+  }
+  console.log(path.constructor)
   flags = flagToString(flags)
   callback = makeCallback(arguments[arguments.length - 1])
   mode = modeNum(mode, 438 /* =0666 */)
-
-  if (!nullCheck(path, callback)) return
+  // Allow for passing of fileentries to support external fs
+  if (isEntry) {
+    if (flags.indexOf('w') > -1 || flags.indexOf('a') > -1) {
+      path.createWriter(function (fileWriter) {
+        fileWriter.flags = flags
+        fileWriter.fullPath = path.fullPath
+        fds[fileWriter.fullPath] = {}
+        fds[fileWriter.fullPath].status = 'open'
+        fileWriter.key = fileWriter.fullPath
+        callback(null, fileWriter)
+      }, callback)
+    } else {
+      path.file(function (file) {
+        file.fullPath = path.fullPath
+        fds[file.fullPath] = {}
+        fds[file.fullPath].status = 'open'
+        file.key = file.fullPath
+        callback(null, file)
+      })
+    }
+    return
+  }
   window.requestFileSystem(
     window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
     function (cfs) {

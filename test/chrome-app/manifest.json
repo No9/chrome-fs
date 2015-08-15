@@ -11,7 +11,9 @@
     }
   },
   "permissions": [
+    "fileSystem",
     "unlimitedStorage",
+    "system.network",
     "*://*.github.com/*"
   ]
 }

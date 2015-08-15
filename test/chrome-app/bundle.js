@@ -8499,12 +8499,39 @@ exports.fstat = function (fd, callback) {
 }
 
 exports.open = function (path, flags, mode, callback) {
-  path = resolve(path)
+  var isEntry = false
+  if (!nullCheck(path, callback)) return
+  if (typeof path === 'object') {
+    isEntry = true
+  } else {
+    path = resolve(path)
+  }
+  console.log(path.constructor)
   flags = flagToString(flags)
   callback = makeCallback(arguments[arguments.length - 1])
   mode = modeNum(mode, 438 /* =0666 */)
-
-  if (!nullCheck(path, callback)) return
+  // Allow for passing of fileentries to support external fs
+  if (isEntry) {
+    if (flags.indexOf('w') > -1 || flags.indexOf('a') > -1) {
+      path.createWriter(function (fileWriter) {
+        fileWriter.flags = flags
+        fileWriter.fullPath = path.fullPath
+        fds[fileWriter.fullPath] = {}
+        fds[fileWriter.fullPath].status = 'open'
+        fileWriter.key = fileWriter.fullPath
+        callback(null, fileWriter)
+      }, callback)
+    } else {
+      path.file(function (file) {
+        file.fullPath = path.fullPath
+        fds[file.fullPath] = {}
+        fds[file.fullPath].status = 'open'
+        file.key = file.fullPath
+        callback(null, file)
+      })
+    }
+    return
+  }
   window.requestFileSystem(
     window.PERSISTENT, FILESYSTEM_DEFAULT_SIZE,
     function (cfs) {
@@ -12513,6 +12540,7 @@ module.exports.obj = through2(function (options, transform, flush) {
 
 }).call(this,require('_process'))
 },{"_process":14,"readable-stream/transform":69,"util":45,"xtend":70}],72:[function(require,module,exports){
+(function (Buffer){
 require('../simple/test-fs-stat')
 require('../simple/test-fs-exists')
 require('../simple/test-fs-write-file')
@@ -12547,7 +12575,37 @@ require('../dat-test/fstat')
 require('../libs/mkdirp-test')
 require('../libs/https-test.js')
 
-},{"../dat-test/append-file":74,"../dat-test/close":75,"../dat-test/exists":76,"../dat-test/fstat":77,"../dat-test/ftruncate":78,"../dat-test/mkdir":79,"../dat-test/open":80,"../dat-test/read":83,"../dat-test/read-file":81,"../dat-test/read-stream":82,"../dat-test/readdir":84,"../dat-test/rename":85,"../dat-test/rmdir":86,"../dat-test/truncate":87,"../dat-test/unlink":88,"../dat-test/write":91,"../dat-test/write-file":89,"../dat-test/write-stream":90,"../libs/https-test.js":92,"../libs/mkdirp-test":93,"../simple/test-fs-append-file":94,"../simple/test-fs-empty-read-stream":95,"../simple/test-fs-exists":96,"../simple/test-fs-mkdir":97,"../simple/test-fs-read":101,"../simple/test-fs-read-buffer":98,"../simple/test-fs-read-stream":100,"../simple/test-fs-read-stream-fd":99,"../simple/test-fs-readdir":102,"../simple/test-fs-stat":103,"../simple/test-fs-write":106,"../simple/test-fs-write-buffer":104,"../simple/test-fs-write-file":105}],73:[function(require,module,exports){
+// UI integration
+var fs = require('../../chrome')
+var chooseFileButton = document.querySelector('#choose_file')
+var accepts = [{
+  mimeTypes: ['text/*'],
+  extensions: ['js', 'css', 'txt', 'html', 'xml', 'tsv', 'csv', 'rtf']
+}]
+
+chooseFileButton.addEventListener('click', function (e) {
+  chrome.fileSystem.chooseEntry({type: 'openFile', accepts: accepts}, function (theEntry) { // eslint-disable-line
+    if (!theEntry) {
+      document.querySelector('#textfileoutput').innerHTML = 'No file selected.'
+      return
+    }
+    fs.open(theEntry, 'r', function (err, fd) {
+      if (err) {
+        document.querySelector('#textfileoutput').innerHTML = err.toString()
+      }
+      var b = new Buffer(1024)
+      fs.read(fd, b, 0, 11, null, function (err, read) {
+        if (err) {
+          document.querySelector('#textfileoutput').innerHTML = err.toString()
+        }
+        document.querySelector('#textfileoutput').innerHTML = 'First 11 chars are: ' + b.slice(0, 11).toString()
+      })
+    })
+  })
+})
+
+}).call(this,require("buffer").Buffer)
+},{"../../chrome":47,"../dat-test/append-file":74,"../dat-test/close":75,"../dat-test/exists":76,"../dat-test/fstat":77,"../dat-test/ftruncate":78,"../dat-test/mkdir":79,"../dat-test/open":80,"../dat-test/read":83,"../dat-test/read-file":81,"../dat-test/read-stream":82,"../dat-test/readdir":84,"../dat-test/rename":85,"../dat-test/rmdir":86,"../dat-test/truncate":87,"../dat-test/unlink":88,"../dat-test/write":91,"../dat-test/write-file":89,"../dat-test/write-stream":90,"../libs/https-test.js":92,"../libs/mkdirp-test":93,"../simple/test-fs-append-file":94,"../simple/test-fs-empty-read-stream":95,"../simple/test-fs-exists":96,"../simple/test-fs-mkdir":97,"../simple/test-fs-read":101,"../simple/test-fs-read-buffer":98,"../simple/test-fs-read-stream":100,"../simple/test-fs-read-stream-fd":99,"../simple/test-fs-readdir":102,"../simple/test-fs-stat":103,"../simple/test-fs-write":106,"../simple/test-fs-write-buffer":104,"../simple/test-fs-write-file":105,"buffer":4}],73:[function(require,module,exports){
 exports.tmpDir = '/'
 exports.error = function (msg) {
   console.log(msg)
